@@ -68,9 +68,25 @@ def get_devops_token_via_azure_cli(
         "--use-device-code",
         "--allow-no-subscriptions",
         "--only-show-errors",
-        "-o",
-        "none",
     ]
+
+    try:
+        result = subprocess.run(
+            ["az", "version"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if '"azure-cli":' in result.stdout:
+            import json
+
+            version_info = json.loads(result.stdout)
+            cli_version = version_info.get("azure-cli", "")
+            major = int(cli_version.split(".")[0]) if cli_version else 0
+            if major >= 2:
+                login_args.append("--skip-subscription-selection")
+    except Exception:
+        pass
 
     if tenant_id:
         login_args.extend(["--tenant", tenant_id])
