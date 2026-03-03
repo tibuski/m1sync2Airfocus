@@ -107,11 +107,7 @@ def get_devops_token_via_azure_cli(config: AzureCliConfig) -> Optional[str]:
     if not login_cmd or not token_cmd:
         return None
 
-    print("\nComplete the Azure login and tenant selection in the window above.")
-    print("Press Enter here after you've selected your tenant and subscription...")
-    input()
-
-    # Interactive login
+    # Interactive login (will prompt for device code and tenant selection)
     subprocess.run(login_cmd, check=False, env=azure_cli_env())
 
     # Token retrieval
