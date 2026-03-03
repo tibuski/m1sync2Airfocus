@@ -1,0 +1,59 @@
+# =============================================================================
+# JIRA Configuration
+# =============================================================================
+
+JIRA_REST_URL = "https://your-jira-instance.com/rest/api/latest"
+JIRA_PROJECT_KEY = "YOUR_PROJECT_KEY"
+JIRA_PAT = "your-jira-personal-access-token-here"
+
+# =============================================================================
+# Azure DevOps Configuration
+# =============================================================================
+
+AZURE_DEVOPS_URL = "https://dev.azure.com/your-org/your-project"
+AZURE_DEVOPS_WORK_ITEM_TYPE = "Epic"
+
+# Optional overrides
+
+# Azure DevOps AAD resource/audience. This GUID is static for Azure DevOps and normally should not be changed.
+AZURE_DEVOPS_RESOURCE = "499b84ac-1321-427f-aa17-267ca6975798"
+
+AZURE_CLI_PYTHON_EXE = r"C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\python.exe"
+AZURE_CLI_BAT_PATH = r"C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\Scripts\az.bat"
+
+# =============================================================================
+# Airfocus Configuration
+# =============================================================================
+
+AIRFOCUS_REST_URL = "https://app.airfocus.com/api"
+AIRFOCUS_WORKSPACE_ID = "your-workspace-id-here"
+AIRFOCUS_API_KEY = "your-airfocus-api-key-here"
+
+# =============================================================================
+# Sync Options
+# =============================================================================
+
+JIRA_TO_AIRFOCUS_STATUS_MAPPING = {
+    "Draft": ["To Do", "Open"],
+    "In Progress": ["In Progress", "IN REFINEMENT"],
+    "Done": ["Done", "Cancelled"],
+    "On Hold": ["On hold"]
+}
+
+AZURE_DEVOPS_TO_AIRFOCUS_STATUS_MAPPING = {
+    "Draft": ["New"],
+    "In Progress": ["Active"],
+    "Done": ["Resolved", "Closed", "Removed"],
+    "On Hold": ["On hold"],
+}
+
+TEAM_FIELD = {"YOUR_TEAM_FIELD_NAME": ["YOUR_TEAM_VALUE"]}
+
+# =============================================================================
+# General Settings
+# =============================================================================
+
+DATA_DIR = "data"
+LOG_FILE_PATH = "data/jira2airfocus.log"
+LOGGING_LEVEL = "WARNING"
+SSL_VERIFY = False

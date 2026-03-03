@@ -1,0 +1,4 @@
+# .ignore
+# Make these visible to the AI
+
+!constants.py 
