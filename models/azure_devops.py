@@ -77,20 +77,22 @@ def get_devops_token_via_azure_cli(
 
     login_cmd = build_az_command(config, login_args)
 
-    token_cmd = build_az_command(
-        config,
-        [
-            "account",
-            "get-access-token",
-            "--resource",
-            config.devops_resource,
-            "--query",
-            "accessToken",
-            "-o",
-            "tsv",
-            "--only-show-errors",
-        ],
-    )
+    token_args = [
+        "account",
+        "get-access-token",
+        "--resource",
+        config.devops_resource,
+        "--query",
+        "accessToken",
+        "-o",
+        "tsv",
+        "--only-show-errors",
+    ]
+
+    if tenant_id:
+        token_args.extend(["--tenant", tenant_id])
+
+    token_cmd = build_az_command(config, token_args)
 
     if not login_cmd or not token_cmd:
         return None
