@@ -143,12 +143,12 @@ class JiraSync(BaseSync):
             source_keys = [item["source_key"] for item in batch]
 
             try:
-                success, result = self.airfocus_client.create_items_batch(
+                success, result = self.airfocus_client.create_items_bulk(
                     workspace_id, payloads
                 )
                 if success:
                     created_count += len(batch)
-                    logger.info("Batch created {} items", len(batch))
+                    logger.info("Bulk created {} items", len(batch))
                 else:
                     error_count += len(batch)
                     for sk in source_keys:
@@ -165,23 +165,23 @@ class JiraSync(BaseSync):
                     errors.append(
                         {"source_key": sk, "action": "create", "error": str(e)}
                     )
-                logger.error("Batch create failed: {}", e)
+                logger.error("Bulk create failed: {}", e)
 
         for i in range(0, len(to_update), batch_size):
             batch = to_update[i : i + batch_size]
             item_updates = [
-                {"id": item["item_id"], "operations": item["operations"]}
+                {"item_id": item["item_id"], "operations": item["operations"]}
                 for item in batch
             ]
             source_keys = [item["source_key"] for item in batch]
 
             try:
-                success, result = self.airfocus_client.patch_items_batch(
+                success, result = self.airfocus_client.patch_items_bulk(
                     workspace_id, item_updates
                 )
                 if success:
                     updated_count += len(batch)
-                    logger.info("Batch updated {} items", len(batch))
+                    logger.info("Bulk updated {} items", len(batch))
                 else:
                     error_count += len(batch)
                     for sk in source_keys:
@@ -198,7 +198,7 @@ class JiraSync(BaseSync):
                     errors.append(
                         {"source_key": sk, "action": "update", "error": str(e)}
                     )
-                logger.error("Batch update failed: {}", e)
+                logger.error("Bulk update failed: {}", e)
 
         logger.info(
             "Sync completed. Created: {}, Updated: {}, Errors: {}",
