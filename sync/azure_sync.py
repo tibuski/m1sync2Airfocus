@@ -27,10 +27,8 @@ class AzureDevOpsSync(BaseSync):
             az_cli_bat_path=getattr(self.config, "AZURE_CLI_BAT_PATH", None),
         )
 
-        tenant_id = getattr(self.config, "AZURE_TENANT_ID", None) or None
-
         logger.info("Acquiring Azure DevOps token via Azure CLI...")
-        token = get_devops_token_via_azure_cli(config, tenant_id)
+        token = get_devops_token_via_azure_cli(config)
 
         if token:
             logger.info("Successfully acquired Azure DevOps token")

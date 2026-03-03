@@ -58,9 +58,7 @@ def azure_cli_env() -> dict:
     return env
 
 
-def get_devops_token_via_azure_cli(
-    config: AzureCliConfig, tenant_id: str = None
-) -> Optional[str]:
+def get_devops_token_via_azure_cli(config: AzureCliConfig) -> Optional[str]:
     """Login with device-code and return an access token for Azure DevOps."""
 
     login_args = [
@@ -89,27 +87,22 @@ def get_devops_token_via_azure_cli(
     except Exception:
         pass
 
-    if tenant_id:
-        login_args.extend(["--tenant", tenant_id])
-
     login_cmd = build_az_command(config, login_args)
 
-    token_args = [
-        "account",
-        "get-access-token",
-        "--resource",
-        config.devops_resource,
-        "--query",
-        "accessToken",
-        "-o",
-        "tsv",
-        "--only-show-errors",
-    ]
-
-    if tenant_id:
-        token_args.extend(["--tenant", tenant_id])
-
-    token_cmd = build_az_command(config, token_args)
+    token_cmd = build_az_command(
+        config,
+        [
+            "account",
+            "get-access-token",
+            "--resource",
+            config.devops_resource,
+            "--query",
+            "accessToken",
+            "-o",
+            "tsv",
+            "--only-show-errors",
+        ],
+    )
 
     if not login_cmd or not token_cmd:
         return None

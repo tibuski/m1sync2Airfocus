@@ -13,9 +13,6 @@ JIRA_PAT = "your-jira-personal-access-token-here"
 AZURE_DEVOPS_URL = "https://dev.azure.com/your-org/your-project"
 AZURE_DEVOPS_WORK_ITEM_TYPE = "Epic"
 
-# Optional: Specify tenant ID to skip tenant selection prompt
-AZURE_TENANT_ID = ""
-
 # Optional overrides
 
 # Azure DevOps AAD resource/audience. This GUID is static for Azure DevOps and normally should not be changed.
