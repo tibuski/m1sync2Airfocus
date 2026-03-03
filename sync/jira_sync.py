@@ -109,6 +109,11 @@ class JiraSync(BaseSync):
         to_create = []
         to_update = []
 
+        created_count = 0
+        updated_count = 0
+        error_count = 0
+        errors = []
+
         for jira_item in jira_items:
             source_key = jira_item.key
             existing_item = airfocus_by_source_key.get(source_key)
