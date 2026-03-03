@@ -114,15 +114,12 @@ def get_devops_token_via_azure_cli(
     if not login_cmd or not token_cmd:
         return None
 
-    # Interactive login - send Enter to accept default tenant/subscription
-    subprocess.run(
-        login_cmd,
-        check=False,
-        env=azure_cli_env(),
-        input="\n",
-        text=True,
-        timeout=300,
-    )
+    print("\nComplete the Azure login and tenant selection in the window above.")
+    print("Press Enter here after you've selected your tenant and subscription...")
+    input()
+
+    # Interactive login
+    subprocess.run(login_cmd, check=False, env=azure_cli_env())
 
     # Token retrieval
     try:
