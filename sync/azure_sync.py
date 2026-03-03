@@ -113,6 +113,9 @@ class AzureDevOpsSync(BaseSync):
         error_count = 0
         errors = []
 
+        to_create = []
+        to_update = []
+
         for azure_item in raw_items:
             azure_id = azure_item["id"]
             title = azure_item["fields"].get("System.Title", "")
@@ -139,60 +142,86 @@ class AzureDevOpsSync(BaseSync):
                     ", ".join(validation_errors),
                 )
 
+            if existing:
+                to_update.append(
+                    {
+                        "item_id": existing.item_id,
+                        "azure_id": str(azure_id),
+                        "operations": airfocus_item.to_patch_payload(),
+                    }
+                )
+            else:
+                to_create.append(
+                    {
+                        "item": airfocus_item,
+                        "azure_id": str(azure_id),
+                    }
+                )
+
+        batch_size = 50
+
+        for i in range(0, len(to_create), batch_size):
+            batch = to_create[i : i + batch_size]
+            payloads = [item["item"].to_create_payload() for item in batch]
+            azure_ids = [item["azure_id"] for item in batch]
+
             try:
-                if existing:
-                    logger.info(
-                        "Updating existing Airfocus item for Azure DevOps {}", azure_id
-                    )
-
-                    patch_operations = airfocus_item.to_patch_payload()
-                    success, result = self.airfocus_client.patch_item(
-                        workspace_id, existing.item_id, patch_operations
-                    )
-
-                    if success:
-                        updated_count += 1
-                    else:
-                        error_count += 1
-                        errors.append(
-                            {
-                                "azure_id": azure_id,
-                                "action": "update",
-                                "error": result.get("error"),
-                            }
-                        )
+                success, result = self.airfocus_client.create_items_batch(
+                    workspace_id, payloads
+                )
+                if success:
+                    created_count += len(batch)
+                    logger.info("Batch created {} items", len(batch))
                 else:
-                    logger.info(
-                        "Creating new Airfocus item for Azure DevOps {}", azure_id
-                    )
-
-                    payload = airfocus_item.to_create_payload()
-                    success, result = self.airfocus_client.create_item(
-                        workspace_id, payload
-                    )
-
-                    if success:
-                        created_count += 1
-                    else:
-                        error_count += 1
+                    error_count += len(batch)
+                    for az_id in azure_ids:
                         errors.append(
                             {
-                                "azure_id": azure_id,
+                                "azure_id": az_id,
                                 "action": "create",
                                 "error": result.get("error"),
                             }
                         )
-
             except Exception as e:
-                error_count += 1
-                errors.append(
-                    {
-                        "azure_id": azure_id,
-                        "action": "unknown",
-                        "error": str(e),
-                    }
+                error_count += len(batch)
+                for az_id in azure_ids:
+                    errors.append(
+                        {"azure_id": az_id, "action": "create", "error": str(e)}
+                    )
+                logger.error("Batch create failed: {}", e)
+
+        for i in range(0, len(to_update), batch_size):
+            batch = to_update[i : i + batch_size]
+            item_updates = [
+                {"id": item["item_id"], "operations": item["operations"]}
+                for item in batch
+            ]
+            azure_ids = [item["azure_id"] for item in batch]
+
+            try:
+                success, result = self.airfocus_client.patch_items_batch(
+                    workspace_id, item_updates
                 )
-                logger.error("Error syncing Azure DevOps {}: {}", azure_id, e)
+                if success:
+                    updated_count += len(batch)
+                    logger.info("Batch updated {} items", len(batch))
+                else:
+                    error_count += len(batch)
+                    for az_id in azure_ids:
+                        errors.append(
+                            {
+                                "azure_id": az_id,
+                                "action": "update",
+                                "error": result.get("error"),
+                            }
+                        )
+            except Exception as e:
+                error_count += len(batch)
+                for az_id in azure_ids:
+                    errors.append(
+                        {"azure_id": az_id, "action": "update", "error": str(e)}
+                    )
+                logger.error("Batch update failed: {}", e)
 
         logger.info(
             "Sync completed. Created: {}, Updated: {}, Errors: {}",

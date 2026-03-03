@@ -173,3 +173,67 @@ class AirfocusClient:
         return self.validate_response(
             response, f"Update Airfocus item {item_id}", [200, 201]
         )
+
+    def create_items_batch(
+        self, workspace_id: str, payloads: List[Dict[str, Any]]
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Create multiple items in a workspace using batch API.
+
+        Args:
+            workspace_id: The Airfocus workspace ID
+            payloads: List of item creation payloads
+
+        Returns:
+            Tuple of (success, data_or_error_dict)
+        """
+        url = f"{self.config.AIRFOCUS_REST_URL}/workspaces/{workspace_id}/items/batch"
+        headers = get_airfocus_headers()
+
+        logger.info("Creating {} items in batch", len(payloads))
+
+        try:
+            response = self.session.post(
+                url,
+                headers=headers,
+                json={"items": payloads},
+                verify=self.config.SSL_VERIFY,
+            )
+        except requests.exceptions.RequestException as e:
+            raise APIConnectionError(
+                f"Failed to batch create items in workspace {workspace_id}: {str(e)}"
+            )
+
+        return self.validate_response(response, "Batch create items", [200, 201])
+
+    def patch_items_batch(
+        self, workspace_id: str, item_updates: List[Dict[str, Any]]
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Update multiple items in a workspace using batch API.
+
+        Args:
+            workspace_id: The Airfocus workspace ID
+            item_updates: List of dicts with item_id and patch operations
+
+        Returns:
+            Tuple of (success, data_or_error_dict)
+        """
+        url = f"{self.config.AIRFOCUS_REST_URL}/workspaces/{workspace_id}/items/batch"
+        headers = get_airfocus_headers()
+
+        logger.info("Updating {} items in batch", len(item_updates))
+
+        try:
+            response = self.session.patch(
+                url,
+                headers=headers,
+                json={"items": item_updates},
+                verify=self.config.SSL_VERIFY,
+            )
+        except requests.exceptions.RequestException as e:
+            raise APIConnectionError(
+                f"Failed to batch update items in workspace {workspace_id}: {str(e)}"
+            )
+
+        return self.validate_response(response, "Batch update items", [200, 201])

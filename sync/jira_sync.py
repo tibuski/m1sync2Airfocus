@@ -106,69 +106,94 @@ class JiraSync(BaseSync):
             if af_item.source_key:
                 airfocus_by_source_key[af_item.source_key] = af_item
 
-        created_count = 0
-        updated_count = 0
-        error_count = 0
-        errors = []
+        to_create = []
+        to_update = []
 
         for jira_item in jira_items:
             source_key = jira_item.key
+            existing_item = airfocus_by_source_key.get(source_key)
+            airfocus_item = AirfocusItem.from_jira_item(jira_item)
+
+            if existing_item:
+                to_update.append(
+                    {
+                        "item_id": existing_item.item_id,
+                        "source_key": source_key,
+                        "operations": airfocus_item.to_patch_payload(),
+                    }
+                )
+            else:
+                to_create.append(
+                    {
+                        "item": airfocus_item,
+                        "source_key": source_key,
+                    }
+                )
+
+        batch_size = 50
+
+        for i in range(0, len(to_create), batch_size):
+            batch = to_create[i : i + batch_size]
+            payloads = [item["item"].to_create_payload() for item in batch]
+            source_keys = [item["source_key"] for item in batch]
 
             try:
-                existing_item = airfocus_by_source_key.get(source_key)
-                airfocus_item = AirfocusItem.from_jira_item(jira_item)
-
-                if existing_item:
-                    logger.info(
-                        "Updating existing Airfocus item for JIRA {}", source_key
-                    )
-
-                    patch_operations = airfocus_item.to_patch_payload()
-                    success, result = self.airfocus_client.patch_item(
-                        workspace_id, existing_item.item_id, patch_operations
-                    )
-
-                    if success:
-                        updated_count += 1
-                    else:
-                        error_count += 1
-                        errors.append(
-                            {
-                                "source_key": source_key,
-                                "action": "update",
-                                "error": result.get("error"),
-                            }
-                        )
+                success, result = self.airfocus_client.create_items_batch(
+                    workspace_id, payloads
+                )
+                if success:
+                    created_count += len(batch)
+                    logger.info("Batch created {} items", len(batch))
                 else:
-                    logger.info("Creating new Airfocus item for JIRA {}", source_key)
-
-                    payload = airfocus_item.to_create_payload()
-                    success, result = self.airfocus_client.create_item(
-                        workspace_id, payload
-                    )
-
-                    if success:
-                        created_count += 1
-                    else:
-                        error_count += 1
+                    error_count += len(batch)
+                    for sk in source_keys:
                         errors.append(
                             {
-                                "source_key": source_key,
+                                "source_key": sk,
                                 "action": "create",
                                 "error": result.get("error"),
                             }
                         )
-
             except Exception as e:
-                error_count += 1
-                errors.append(
-                    {
-                        "source_key": source_key,
-                        "action": "unknown",
-                        "error": str(e),
-                    }
+                error_count += len(batch)
+                for sk in source_keys:
+                    errors.append(
+                        {"source_key": sk, "action": "create", "error": str(e)}
+                    )
+                logger.error("Batch create failed: {}", e)
+
+        for i in range(0, len(to_update), batch_size):
+            batch = to_update[i : i + batch_size]
+            item_updates = [
+                {"id": item["item_id"], "operations": item["operations"]}
+                for item in batch
+            ]
+            source_keys = [item["source_key"] for item in batch]
+
+            try:
+                success, result = self.airfocus_client.patch_items_batch(
+                    workspace_id, item_updates
                 )
-                logger.error("Exception while syncing JIRA issue {}: {}", source_key, e)
+                if success:
+                    updated_count += len(batch)
+                    logger.info("Batch updated {} items", len(batch))
+                else:
+                    error_count += len(batch)
+                    for sk in source_keys:
+                        errors.append(
+                            {
+                                "source_key": sk,
+                                "action": "update",
+                                "error": result.get("error"),
+                            }
+                        )
+            except Exception as e:
+                error_count += len(batch)
+                for sk in source_keys:
+                    errors.append(
+                        {"source_key": sk, "action": "update", "error": str(e)}
+                    )
+                logger.error("Batch update failed: {}", e)
 
         logger.info(
             "Sync completed. Created: {}, Updated: {}, Errors: {}",
