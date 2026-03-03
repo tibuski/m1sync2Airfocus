@@ -66,26 +66,7 @@ def get_devops_token_via_azure_cli(config: AzureCliConfig) -> Optional[str]:
         "--use-device-code",
         "--allow-no-subscriptions",
         "--only-show-errors",
-        "-o",
-        "none",
     ]
-
-    try:
-        result = subprocess.run(
-            ["az", "version"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        import json
-
-        version_info = json.loads(result.stdout)
-        cli_version = version_info.get("azure-cli", "")
-        major = int(cli_version.split(".")[0]) if cli_version else 0
-        if major >= 2:
-            login_args.append("--skip-subscription-selection")
-    except Exception:
-        pass
 
     login_cmd = build_az_command(config, login_args)
 
@@ -111,27 +92,12 @@ def get_devops_token_via_azure_cli(config: AzureCliConfig) -> Optional[str]:
     subprocess.run(login_cmd, check=False, env=azure_cli_env())
 
     # Token retrieval
-    print("Retrieving access token...")
     try:
-        result = subprocess.run(
-            token_cmd,
-            capture_output=True,
-            text=True,
-            env=azure_cli_env(),
-            timeout=30,
+        return (
+            subprocess.check_output(
+                token_cmd, stderr=subprocess.STDOUT, text=True, env=azure_cli_env()
+            ).strip()
+            or None
         )
-        if result.returncode != 0:
-            print(f"Token retrieval failed: {result.stderr}")
-            return None
-        token = result.stdout.strip()
-        if not token:
-            print("Token retrieval returned empty")
-            return None
-        print("Token retrieved successfully")
-        return token
-    except subprocess.TimeoutExpired:
-        print("Token retrieval timed out")
-        return None
-    except Exception as e:
-        print(f"Token retrieval error: {e}")
+    except subprocess.CalledProcessError:
         return None
