@@ -4,6 +4,7 @@ Airfocus API Client.
 This module provides a dedicated client class for interacting with the Airfocus API.
 """
 
+import time
 import requests
 from typing import Any, Dict, List, Optional, Tuple
 from loguru import logger
@@ -15,9 +16,59 @@ from exceptions import APIConnectionError, APIResponseError
 class AirfocusClient:
     """Client for interacting with Airfocus REST API."""
 
-    def __init__(self):
+    def __init__(self, max_retries: int = 3, base_delay: float = 1.0):
         self.config = get_config()
         self.session = requests.Session()
+        self.max_retries = max_retries
+        self.base_delay = base_delay
+
+    def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        retry_on: Optional[List[int]] = None,
+        **kwargs,
+    ) -> requests.Response:
+        """Make HTTP request with exponential backoff retry."""
+        if retry_on is None:
+            retry_on = [429, 500, 502, 503, 504]
+
+        delay = self.base_delay
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self.session.request(method, url, **kwargs)
+
+                if response.status_code in retry_on:
+                    if attempt < self.max_retries:
+                        logger.warning(
+                            "Request to {} failed with status {}, retrying in {:.1f}s (attempt {}/{})",
+                            url,
+                            response.status_code,
+                            delay,
+                            attempt + 1,
+                            self.max_retries + 1,
+                        )
+                        time.sleep(delay)
+                        delay *= 2
+                        continue
+
+                return response
+
+            except requests.exceptions.RequestException as e:
+                if attempt < self.max_retries:
+                    logger.warning(
+                        "Request exception for {}: {}, retrying in {:.1f}s",
+                        url,
+                        str(e),
+                        delay,
+                    )
+                    time.sleep(delay)
+                    delay *= 2
+                else:
+                    raise
+
+        raise APIConnectionError(f"Max retries exceeded for {url}")
 
     def validate_response(
         self,
@@ -69,14 +120,9 @@ class AirfocusClient:
         url = f"{self.config.AIRFOCUS_REST_URL}/workspaces/{workspace_id}"
         headers = get_airfocus_headers()
 
-        try:
-            response = self.session.get(
-                url, headers=headers, verify=self.config.SSL_VERIFY
-            )
-        except requests.exceptions.RequestException as e:
-            raise APIConnectionError(
-                f"Failed to fetch workspace {workspace_id}: {str(e)}"
-            )
+        response = self._request_with_retry(
+            "GET", url, headers=headers, verify=self.config.SSL_VERIFY
+        )
 
         return self.validate_response(response, f"Get workspace {workspace_id}")
 
@@ -95,17 +141,13 @@ class AirfocusClient:
 
         search_payload = {"filters": {}, "pagination": {"limit": 1000, "offset": 0}}
 
-        try:
-            response = self.session.post(
-                url,
-                headers=headers,
-                json=search_payload,
-                verify=self.config.SSL_VERIFY,
-            )
-        except requests.exceptions.RequestException as e:
-            raise APIConnectionError(
-                f"Failed to fetch items for workspace {workspace_id}: {str(e)}"
-            )
+        response = self._request_with_retry(
+            "POST",
+            url,
+            headers=headers,
+            json=search_payload,
+            verify=self.config.SSL_VERIFY,
+        )
 
         return self.validate_response(
             response, f"Get items for workspace {workspace_id}"
@@ -129,14 +171,9 @@ class AirfocusClient:
 
         logger.debug("Creating Airfocus item with payload: {}", payload)
 
-        try:
-            response = self.session.post(
-                url, headers=headers, json=payload, verify=self.config.SSL_VERIFY
-            )
-        except requests.exceptions.RequestException as e:
-            raise APIConnectionError(
-                f"Failed to create item in workspace {workspace_id}: {str(e)}"
-            )
+        response = self._request_with_retry(
+            "POST", url, headers=headers, json=payload, verify=self.config.SSL_VERIFY
+        )
 
         return self.validate_response(response, "Create Airfocus item", [200, 201])
 
@@ -163,12 +200,9 @@ class AirfocusClient:
             "Updating Airfocus item {} with {} patch operations", item_id, len(payload)
         )
 
-        try:
-            response = self.session.patch(
-                url, headers=headers, json=payload, verify=self.config.SSL_VERIFY
-            )
-        except requests.exceptions.RequestException as e:
-            raise APIConnectionError(f"Failed to patch item {item_id}: {str(e)}")
+        response = self._request_with_retry(
+            "PATCH", url, headers=headers, json=payload, verify=self.config.SSL_VERIFY
+        )
 
         return self.validate_response(
             response, f"Update Airfocus item {item_id}", [200, 201]
@@ -194,12 +228,9 @@ class AirfocusClient:
 
         logger.info("Bulk creating {} items", len(payloads))
 
-        try:
-            response = self.session.post(
-                url, headers=headers, json=actions, verify=self.config.SSL_VERIFY
-            )
-        except requests.exceptions.RequestException as e:
-            raise APIConnectionError(f"Failed to bulk create items: {str(e)}")
+        response = self._request_with_retry(
+            "POST", url, headers=headers, json=actions, verify=self.config.SSL_VERIFY
+        )
 
         return self.validate_response(response, "Bulk create items", [200])
 
@@ -226,11 +257,8 @@ class AirfocusClient:
 
         logger.info("Bulk updating {} items", len(item_updates))
 
-        try:
-            response = self.session.post(
-                url, headers=headers, json=actions, verify=self.config.SSL_VERIFY
-            )
-        except requests.exceptions.RequestException as e:
-            raise APIConnectionError(f"Failed to bulk update items: {str(e)}")
+        response = self._request_with_retry(
+            "POST", url, headers=headers, json=actions, verify=self.config.SSL_VERIFY
+        )
 
         return self.validate_response(response, "Bulk update items", [200])
