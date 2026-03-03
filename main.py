@@ -319,6 +319,7 @@ def run_azure_devops_sync() -> None:
 
     logger.info("Fetching Azure DevOps data...")
     azure_data = azure_sync.fetch_data()
+    logger.info("Azure DevOps data result: {}", azure_data)
     if "error" in azure_data:
         logger.error("Failed to fetch Azure DevOps data: {}", azure_data["error"])
         sys.exit(1)
