@@ -1,0 +1,188 @@
+"""
+JIRA synchronization module.
+
+This module provides functionality to sync JIRA issues to Airfocus.
+"""
+
+from typing import Any, Dict, List
+from loguru import logger
+
+from sync.base import BaseSync
+from api import JiraClient
+from models import JiraItem, AirfocusItem
+
+
+class JiraSync(BaseSync):
+    """Handles synchronization from JIRA to Airfocus."""
+
+    def __init__(self):
+        super().__init__()
+        self.jira_client = JiraClient()
+
+    def fetch_data(self) -> Dict[str, Any]:
+        """Fetch JIRA project data."""
+        project_key = self.config.JIRA_PROJECT_KEY
+        logger.info("Fetching JIRA project data for {}...", project_key)
+
+        success, data = self.jira_client.get_issues(project_key)
+
+        if not success:
+            logger.error("Failed to fetch JIRA data: {}", data.get("error"))
+            return {"error": data.get("error")}
+
+        issues_data = data.get("issues", [])
+        all_issues = []
+
+        for issue in issues_data:
+            base_url = self.config.JIRA_REST_URL.replace("/rest/api/latest", "")
+            jira_item = JiraItem.from_jira_api_data(issue, project_key, base_url)
+
+            validation_errors = jira_item.validate()
+            if validation_errors:
+                logger.warning(
+                    "Validation issues for JIRA issue {}: {}",
+                    jira_item.key,
+                    ", ".join(validation_errors),
+                )
+
+            all_issues.append(jira_item.to_dict())
+
+        result = {
+            "project_key": project_key,
+            "total_issues": len(all_issues),
+            "issues": all_issues,
+        }
+
+        self.save_to_json(result, "jira", project_key)
+        self.cleanup_old_files(f"jira_{project_key}_issues_*.json", keep_count=10)
+
+        logger.info("Successfully fetched {} JIRA issues", len(all_issues))
+        return result
+
+    def sync_to_airfocus(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Sync JIRA issues to Airfocus."""
+        workspace_id = self.config.AIRFOCUS_WORKSPACE_ID
+        jira_data = data
+
+        raw_issues = jira_data.get("issues", [])
+        jira_items = []
+        validation_failures = 0
+
+        for issue_dict in raw_issues:
+            try:
+                jira_item = JiraItem.from_simplified_data(issue_dict)
+                validation_errors = jira_item.validate()
+
+                if validation_errors:
+                    logger.warning(
+                        "Skipping JIRA issue {} due to validation errors: {}",
+                        jira_item.key,
+                        ", ".join(validation_errors),
+                    )
+                    validation_failures += 1
+                    continue
+
+                jira_items.append(jira_item)
+            except Exception as e:
+                logger.error(
+                    "Failed to create JiraItem from issue data {}: {}",
+                    issue_dict.get("key", "Unknown"),
+                    e,
+                )
+                validation_failures += 1
+
+        logger.info(
+            "Starting sync of {} JIRA issues to Airfocus ({} validation failures)",
+            len(jira_items),
+            validation_failures,
+        )
+
+        airfocus_data = self.load_airfocus_items()
+        airfocus_items = airfocus_data.get("items", [])
+        airfocus_by_source_key = {}
+
+        for item_data in airfocus_items:
+            af_item = AirfocusItem.from_airfocus_data(item_data)
+            if af_item.source_key:
+                airfocus_by_source_key[af_item.source_key] = af_item
+
+        created_count = 0
+        updated_count = 0
+        error_count = 0
+        errors = []
+
+        for jira_item in jira_items:
+            source_key = jira_item.key
+
+            try:
+                existing_item = airfocus_by_source_key.get(source_key)
+                airfocus_item = AirfocusItem.from_jira_item(jira_item)
+
+                if existing_item:
+                    logger.info(
+                        "Updating existing Airfocus item for JIRA {}", source_key
+                    )
+
+                    patch_operations = airfocus_item.to_patch_payload()
+                    success, result = self.airfocus_client.patch_item(
+                        workspace_id, existing_item.item_id, patch_operations
+                    )
+
+                    if success:
+                        updated_count += 1
+                    else:
+                        error_count += 1
+                        errors.append(
+                            {
+                                "source_key": source_key,
+                                "action": "update",
+                                "error": result.get("error"),
+                            }
+                        )
+                else:
+                    logger.info("Creating new Airfocus item for JIRA {}", source_key)
+
+                    payload = airfocus_item.to_create_payload()
+                    success, result = self.airfocus_client.create_item(
+                        workspace_id, payload
+                    )
+
+                    if success:
+                        created_count += 1
+                    else:
+                        error_count += 1
+                        errors.append(
+                            {
+                                "source_key": source_key,
+                                "action": "create",
+                                "error": result.get("error"),
+                            }
+                        )
+
+            except Exception as e:
+                error_count += 1
+                errors.append(
+                    {
+                        "source_key": source_key,
+                        "action": "unknown",
+                        "error": str(e),
+                    }
+                )
+                logger.error("Exception while syncing JIRA issue {}: {}", source_key, e)
+
+        logger.info(
+            "Sync completed. Created: {}, Updated: {}, Errors: {}",
+            created_count,
+            updated_count,
+            error_count,
+        )
+
+        return {
+            "total_issues": len(raw_issues),
+            "processed_issues": len(jira_items),
+            "validation_failures": validation_failures,
+            "created_count": created_count,
+            "updated_count": updated_count,
+            "error_count": error_count,
+            "errors": errors,
+        }

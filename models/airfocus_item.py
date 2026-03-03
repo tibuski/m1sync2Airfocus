@@ -222,9 +222,18 @@ class AirfocusItem:
 
         Returns:
             tuple: (field_name, field_id, team_field_value)
+
+        Raises:
+            ValueError: If multiple team fields are configured
         """
         if not constants.TEAM_FIELD:
             return None, None, None
+
+        if len(constants.TEAM_FIELD) > 1:
+            raise ValueError(
+                f"Multiple team fields configured: {list(constants.TEAM_FIELD.keys())}. "
+                "Only one team field is supported."
+            )
 
         for field_name, field_values in constants.TEAM_FIELD.items():
             field_id = get_airfocus_field_id(field_name)
