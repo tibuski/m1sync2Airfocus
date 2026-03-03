@@ -35,7 +35,9 @@ class AzureDevOpsSync(BaseSync):
         token = get_devops_token_via_azure_cli(config, tenant_id)
 
         if token:
-            logger.info("Successfully acquired Azure DevOps token")
+            logger.info(
+                "Successfully acquired Azure DevOps token (length: {})", len(token)
+            )
         else:
             logger.error("Failed to acquire Azure DevOps token")
 
@@ -63,9 +65,16 @@ class AzureDevOpsSync(BaseSync):
 
         work_item_type = self.config.AZURE_DEVOPS_WORK_ITEM_TYPE
         logger.info("Fetching Azure DevOps {} items...", work_item_type)
+        logger.info("Organization: {}, Project: {}", organization, project)
 
         client = AzureDevOpsClient(organization, project, token)
+        logger.info("Calling Azure DevOps API...")
         success, data = client.get_work_items(work_item_type)
+        logger.info(
+            "API call result - success: {}, data keys: {}",
+            success,
+            list(data.keys()) if data else "None",
+        )
 
         if not success:
             logger.error("Failed to fetch Azure DevOps data: {}", data.get("error"))
