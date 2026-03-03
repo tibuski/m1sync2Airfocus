@@ -29,9 +29,12 @@ def get_config() -> Any:
     return constants
 
 
-def validate_config() -> List[str]:
+def validate_config(sync_mode: str = None) -> List[str]:
     """
     Validate configuration constants at startup.
+
+    Args:
+        sync_mode: Either "jira" or "azure-devops". If None, validates all.
 
     Returns:
         List of validation error messages (empty if all valid)
@@ -40,16 +43,10 @@ def validate_config() -> List[str]:
 
     errors = []
 
-    if not constants.JIRA_REST_URL or not constants.JIRA_REST_URL.startswith("http"):
-        errors.append("JIRA_REST_URL must be a valid URL")
-
     if not constants.AIRFOCUS_REST_URL or not constants.AIRFOCUS_REST_URL.startswith(
         "http"
     ):
         errors.append("AIRFOCUS_REST_URL must be a valid URL")
-
-    if not constants.JIRA_PROJECT_KEY or not constants.JIRA_PROJECT_KEY.strip():
-        errors.append("JIRA_PROJECT_KEY is required")
 
     if (
         not constants.AIRFOCUS_WORKSPACE_ID
@@ -57,14 +54,34 @@ def validate_config() -> List[str]:
     ):
         errors.append("AIRFOCUS_WORKSPACE_ID is required")
 
-    placeholder_pat = "your-jira-personal-access-token-here"
     placeholder_af = "your-airfocus-api-key-here"
-
-    if not constants.JIRA_PAT or constants.JIRA_PAT == placeholder_pat:
-        errors.append("JIRA_PAT is not set (found placeholder value)")
-
     if not constants.AIRFOCUS_API_KEY or constants.AIRFOCUS_API_KEY == placeholder_af:
         errors.append("AIRFOCUS_API_KEY is not set (found placeholder value)")
+
+    if sync_mode == "jira" or sync_mode is None:
+        if not constants.JIRA_REST_URL or not constants.JIRA_REST_URL.startswith(
+            "http"
+        ):
+            errors.append("JIRA_REST_URL must be a valid URL")
+
+        if not constants.JIRA_PROJECT_KEY or not constants.JIRA_PROJECT_KEY.strip():
+            errors.append("JIRA_PROJECT_KEY is required")
+
+        placeholder_pat = "your-jira-personal-access-token-here"
+        if not constants.JIRA_PAT or constants.JIRA_PAT == placeholder_pat:
+            errors.append("JIRA_PAT is not set (found placeholder value)")
+
+    if sync_mode == "azure-devops" or sync_mode is None:
+        if not hasattr(constants, "AZURE_DEVOPS_URL") or not constants.AZURE_DEVOPS_URL:
+            if sync_mode == "azure-devops" or sync_mode is None:
+                errors.append("AZURE_DEVOPS_URL is required")
+
+        if (
+            not hasattr(constants, "AZURE_DEVOPS_WORK_ITEM_TYPE")
+            or not constants.AZURE_DEVOPS_WORK_ITEM_TYPE
+        ):
+            if sync_mode == "azure-devops" or sync_mode is None:
+                errors.append("AZURE_DEVOPS_WORK_ITEM_TYPE is required")
 
     if constants.TEAM_FIELD:
         placeholder_team_field = "YOUR_TEAM_FIELD_NAME"

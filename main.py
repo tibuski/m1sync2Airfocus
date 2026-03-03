@@ -371,7 +371,8 @@ Examples:
         parser.print_help()
         sys.exit(1)
 
-    validation_errors = validate_config()
+    sync_mode = "jira" if args.jira else "azure-devops"
+    validation_errors = validate_config(sync_mode)
     if validation_errors:
         for error in validation_errors:
             logger.error("Configuration error: {}", error)
