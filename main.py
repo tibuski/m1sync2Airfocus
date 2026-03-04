@@ -29,7 +29,7 @@ if not constants.SSL_VERIFY:
 logger.remove()
 logger.add(
     constants.LOG_FILE_PATH,
-    level="INFO",
+    level="DEBUG",
     format="{time:YYYY-MM-DD HH:mm:ss} - {level} - {message}",
     rotation="10 MB",
     retention="30 days",
@@ -346,6 +346,12 @@ def run_azure_devops_sync() -> None:
 
 def main() -> None:
     """Main entry point for the JIRA to Airfocus integration script."""
+    logger.info(
+        "Logger configuration - file: DEBUG to {}, console: {}",
+        constants.LOG_FILE_PATH,
+        constants.LOGGING_LEVEL,
+    )
+
     parser = argparse.ArgumentParser(
         description="Sync JIRA or Azure DevOps issues to Airfocus",
         formatter_class=argparse.RawDescriptionHelpFormatter,
