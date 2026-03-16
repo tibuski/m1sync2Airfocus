@@ -1,6 +1,6 @@
-# JIRA/Azure DevOps to Airfocus Integration
+# m1sync2Airfocus
 
-A Python script that synchronizes JIRA issues or Azure DevOps work items with Airfocus workspace items.
+Python sync utility that synchronizes JIRA issues or Azure DevOps work items with Airfocus workspace items.
 
 ## Prerequisites
 
@@ -9,23 +9,12 @@ A Python script that synchronizes JIRA issues or Azure DevOps work items with Ai
 - Azure CLI installed (only needed for Azure DevOps sync)
 - Ability to complete `az login` (device-code/MFA) in your tenant (only needed for Azure DevOps sync)
 
-## Features
-
-- Fetch JIRA Epic issues and sync to Airfocus workspace
-- Fetch Azure DevOps work items and sync to Airfocus workspace
-- Update existing items with current source data
-- Duplicate detection and prevention
-- Automatic team assignment
-- Status mapping between source systems and Airfocus
-- Rich Markdown formatting in Airfocus descriptions
-- Export Azure DevOps work items using Azure CLI device-code login
-
 ## Installation
 
 1. **Clone Repository**
    ```bash
-   git clone https://github.com/tibuski/jira2airfocus
-   cd jira2airfocus
+   git clone https://github.com/tibuski/m1sync2Airfocus.git
+   cd m1sync2Airfocus
    ```
 
 2. **Install Dependencies with uv**
@@ -81,7 +70,8 @@ uv run main.py
 
 In `constants.py`:
 - `AZURE_DEVOPS_URL` (required) - Azure DevOps URL (e.g., `https://dev.azure.com/org/project`)
-- `AZURE_DEVOPS_WORK_ITEM_TYPE` (required) - Work item type to export (e.g. `"Epic"`, `"Feature"`, `"User Story"`)
+- `AZURE_DEVOPS_WORK_ITEM_TYPE` (required) - Work item type to export (e.g. `"Epic"`, `"User Story"`)
+- `AZURE_TENANT_ID` (optional) - Tenant ID used for Azure CLI login token acquisition (helps avoid tenant selection prompts)
 - `AZURE_DEVOPS_RESOURCE` (required) - Azure DevOps audience GUID (static; normally do not change)
 - `AZURE_CLI_PYTHON_EXE` / `AZURE_CLI_BAT_PATH` (optional) - Azure CLI locations (helps when running under `uv run`)
 
@@ -105,12 +95,13 @@ All configuration is done in `constants.py`. Here are the available options:
 | `JIRA_PAT` | JIRA Personal Access Token | Required |
 | `AZURE_DEVOPS_URL` | Azure DevOps URL | Required (for --azure-devops) |
 | `AZURE_DEVOPS_WORK_ITEM_TYPE` | Azure DevOps work item type | Required (for --azure-devops) |
+| `AZURE_TENANT_ID` | Azure tenant ID for Azure CLI auth | Optional |
 | `AZURE_DEVOPS_RESOURCE` | Azure DevOps audience GUID | `499b84ac-1321-427f-aa17-267ca6975798` |
 | `AIRFOCUS_REST_URL` | Airfocus API endpoint | `https://app.airfocus.com/api` |
 | `AIRFOCUS_WORKSPACE_ID` | Airfocus workspace ID | Required |
 | `AIRFOCUS_API_KEY` | Airfocus API Key | Required |
-| `LOGGING_LEVEL` | Log verbosity (DEBUG, INFO, WARNING, ERROR) | `WARNING` |
-| `LOG_FILE_PATH` | Path to log file | `data/jira2airfocus.log` |
+| `LOGGING_LEVEL` | Console log verbosity (DEBUG, INFO, WARNING, ERROR) | `WARNING` |
+| `LOG_FILE_PATH` | Path to log file (always stores DEBUG logs) | `data/jira2airfocus.log` |
 | `SSL_VERIFY` | Enable SSL certificate verification | `False` |
 | `DATA_DIR` | Directory for data files | `data` |
 | `JIRA_TO_AIRFOCUS_STATUS_MAPPING` | Map JIRA statuses to Airfocus | Optional |
