@@ -376,7 +376,7 @@ Examples:
 
     if not args.jira and not args.azure_devops:
         parser.print_help()
-        sys.exit(1)
+        sys.exit(0)
 
     sync_mode = "jira" if args.jira else "azure-devops"
     validation_errors = validate_config(sync_mode)

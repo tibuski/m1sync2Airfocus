@@ -11,30 +11,26 @@ Python sync utility that synchronizes JIRA issues or Azure DevOps work items wit
 
 ## Installation
 
-1. **Clone Repository**
-   ```bash
-   git clone https://github.com/tibuski/m1sync2Airfocus.git
-   cd m1sync2Airfocus
-   ```
+```powershell
+# Clone the repository locally
+git clone https://github.com/tibuski/m1sync2Airfocus.git
 
-2. **Install Dependencies with uv**
-   ```bash
-   uv sync
-   ```
+# Enter the project folder
+cd m1sync2Airfocus
 
-3. **Configure the Application**
-   
-   Copy `constants.py.example` to `constants.py` and update with your credentials:
-   ```bash
-   cp constants.py.example constants.py
-   ```
-   
-   Then edit `constants.py` and fill in the required values:
-   - `JIRA_REST_URL` - Your JIRA instance URL
-   - `JIRA_PROJECT_KEY` - Your JIRA project key
-   - `JIRA_PAT` - Your JIRA API token
-   - `AIRFOCUS_WORKSPACE_ID` - From Airfocus URL
-   - `AIRFOCUS_API_KEY` - Your Airfocus API key
+# Create/update virtual environment and install dependencies
+uv sync
+
+# Create your local configuration file from the template
+Copy-Item .\constants.py.example .\constants.py
+```
+
+Then edit `constants.py` and fill in the required values:
+- `JIRA_REST_URL` - Your JIRA instance URL
+- `JIRA_PROJECT_KEY` - Your JIRA project key
+- `JIRA_PAT` - Your JIRA API token
+- `AIRFOCUS_WORKSPACE_ID` - From Airfocus URL
+- `AIRFOCUS_API_KEY` - Your Airfocus API key
 
 ## Getting API Credentials
 
@@ -53,17 +49,18 @@ Python sync utility that synchronizes JIRA issues or Azure DevOps work items wit
 
 Run the sync with either `--jira` or `--azure-devops` flag:
 
-```bash
+```powershell
 # Sync JIRA issues to Airfocus
-uv run main.py --jira
+uv run .\main.py --jira
 
 # Sync Azure DevOps work items to Airfocus
-uv run main.py --azure-devops
+uv run .\main.py --azure-devops
 ```
 
-Run without arguments to see help:
-```bash
-uv run main.py
+Run without arguments to display help:
+```powershell
+# Show CLI help
+uv run .\main.py
 ```
 
 ## Azure DevOps Configuration
