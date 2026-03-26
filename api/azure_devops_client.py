@@ -74,7 +74,7 @@ class AzureDevOpsClient:
         headers = get_azure_devops_headers(self.token)
 
         query = {
-            "query": f"SELECT [System.Id], [System.Title], [System.Description], [System.State], [System.AssignedTo], [System.ChangedDate] FROM WorkItems WHERE [System.WorkItemType] = '{work_item_type}'"
+            "query": f"SELECT [System.Id], [System.Title], [System.Description], [System.State], [System.AssignedTo], [System.ChangedDate], [Microsoft.VSTS.Scheduling.StartDate], [Microsoft.VSTS.Scheduling.TargetDate], [Microsoft.VSTS.Scheduling.DueDate] FROM WorkItems WHERE [System.WorkItemType] = '{work_item_type}'"
         }
 
         logger.info("Querying Azure DevOps for {} items...", work_item_type)
@@ -107,7 +107,7 @@ class AzureDevOpsClient:
 
         for i in range(0, len(ids), batch_size):
             batch_ids = ids[i : i + batch_size]
-            ids_url = f"{self.base_url}/_apis/wit/workitems?ids={','.join(batch_ids)}&fields=System.Id,System.Title,System.Description,System.State,System.AssignedTo,System.ChangedDate&$top={batch_size}&api-version=7.0"
+            ids_url = f"{self.base_url}/_apis/wit/workitems?ids={','.join(batch_ids)}&fields=System.Id,System.Title,System.Description,System.State,System.AssignedTo,System.ChangedDate,Microsoft.VSTS.Scheduling.StartDate,Microsoft.VSTS.Scheduling.TargetDate,Microsoft.VSTS.Scheduling.DueDate&$top={batch_size}&api-version=7.0"
 
             try:
                 batch_response = self.session.get(

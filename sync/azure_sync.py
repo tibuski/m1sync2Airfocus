@@ -19,6 +19,12 @@ class AzureDevOpsSync(BaseSync):
     def __init__(self):
         super().__init__()
 
+    def _get_date_range_source_fields(self) -> Tuple[str, str]:
+        return (
+            "Microsoft.VSTS.Scheduling.StartDate",
+            "Microsoft.VSTS.Scheduling.TargetDate",
+        )
+
     def get_token(self) -> Optional[str]:
         """Acquire Azure DevOps access token via Azure CLI."""
         config = AzureCliConfig(
@@ -128,12 +134,23 @@ class AzureDevOpsSync(BaseSync):
 
         to_create = []
         to_update = []
+        start_field_key, end_field_key = self._get_date_range_source_fields()
 
         for azure_item in raw_items:
             azure_id = azure_item["id"]
-            title = azure_item["fields"].get("System.Title", "")
-            state = azure_item["fields"].get("System.State", "")
-            assignee = azure_item["fields"].get("System.AssignedTo")
+            azure_fields = azure_item["fields"]
+
+            title = azure_fields.get("System.Title", "")
+            state = azure_fields.get("System.State", "")
+            assignee = azure_fields.get("System.AssignedTo")
+            start_date = azure_fields.get(start_field_key) or azure_fields.get(
+                "Microsoft.VSTS.Scheduling.StartDate"
+            )
+            end_date = (
+                azure_fields.get(end_field_key)
+                or azure_fields.get("Microsoft.VSTS.Scheduling.TargetDate")
+                or azure_fields.get("Microsoft.VSTS.Scheduling.DueDate")
+            )
 
             existing = airfocus_by_azure_id.get(str(azure_id))
 
@@ -145,6 +162,8 @@ class AzureDevOpsSync(BaseSync):
                 title,
                 state,
                 assignee,
+                start_date,
+                end_date,
             )
 
             validation_errors = airfocus_item.validate()

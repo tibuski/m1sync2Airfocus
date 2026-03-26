@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from datetime import datetime
 import re
 from loguru import logger
 
@@ -43,6 +44,7 @@ class AirfocusItem:
     assignee_user_group_ids: List[str] = None
     order: int = 0
     azure_devops_id: Optional[str] = None
+    date_range_field_value: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
         """Initialize default values for mutable fields."""
@@ -97,6 +99,8 @@ class AirfocusItem:
         title: str,
         state: str,
         assignee: Optional[Dict[str, Any]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> "AirfocusItem":
         """
         Create AirfocusItem from Azure DevOps work item.
@@ -134,6 +138,11 @@ class AirfocusItem:
             assignee,
         )
 
+        date_range_field_value = cls._build_date_range_field_value(
+            start_date=start_date,
+            end_date=end_date,
+        )
+
         return cls(
             name=name,
             source_key=source_key,
@@ -141,7 +150,47 @@ class AirfocusItem:
             status_id=status_id,
             team_field_value=team_field_value,
             azure_devops_id=str(azure_devops_id),
+            date_range_field_value=date_range_field_value,
         )
+
+    @staticmethod
+    def _normalize_date(value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+
+        normalized = str(value).strip()
+        if not normalized:
+            return None
+
+        if len(normalized) >= 10 and normalized[4] == "-" and normalized[7] == "-":
+            return normalized[:10]
+
+        try:
+            parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+            return parsed.date().isoformat()
+        except ValueError:
+            logger.warning("Unable to parse date value '{}'", normalized)
+            return None
+
+    @classmethod
+    def _build_date_range_field_value(
+        cls,
+        start_date: Optional[str],
+        end_date: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        normalized_start = cls._normalize_date(start_date)
+        normalized_end = cls._normalize_date(end_date)
+
+        if not normalized_start and not normalized_end:
+            return None
+
+        date_range_value: Dict[str, str] = {"timezone": "UTC"}
+        if normalized_start:
+            date_range_value["startDate"] = normalized_start
+        if normalized_end:
+            date_range_value["endDate"] = normalized_end
+
+        return {"dateRange": date_range_value}
 
     @classmethod
     def from_airfocus_data(cls, airfocus_data: Dict[str, Any]) -> "AirfocusItem":
@@ -278,7 +327,42 @@ class AirfocusItem:
                         field_name,
                     )
 
+        if self.date_range_field_value:
+            date_range_field_name, date_range_field_id = (
+                self._get_date_range_field_configuration()
+            )
+            if date_range_field_id:
+                fields_dict[date_range_field_id] = self.date_range_field_value
+            else:
+                logger.error(
+                    "Date range field '{}' not found in Airfocus field mappings",
+                    date_range_field_name,
+                )
+
         return fields_dict
+
+    def _get_date_range_field_configuration(self) -> Tuple[Optional[str], Optional[str]]:
+        date_range_config = getattr(constants, "DATE_RANGE_FIELD", {})
+        if not date_range_config:
+            return None, None
+
+        if isinstance(date_range_config, str):
+            field_name = date_range_config.strip()
+            if not field_name:
+                return None, None
+            field_id = get_airfocus_field_id(field_name)
+            return field_name, field_id
+
+        if len(date_range_config) > 1:
+            raise ValueError(
+                f"Multiple date range fields configured: {list(date_range_config.keys())}. "
+                "Only one date range field is supported."
+            )
+
+        field_name = next(iter(date_range_config.keys()))
+        field_id = get_airfocus_field_id(field_name)
+
+        return field_name, field_id
 
     def to_create_payload(self) -> Dict[str, Any]:
         """
@@ -353,6 +437,24 @@ class AirfocusItem:
                         field_name,
                     )
 
+        if self.date_range_field_value:
+            date_range_field_name, date_range_field_id = (
+                self._get_date_range_field_configuration()
+            )
+            if date_range_field_id:
+                patch_operations.append(
+                    {
+                        "op": "replace",
+                        "path": f"/fields/{date_range_field_id}",
+                        "value": self.date_range_field_value,
+                    }
+                )
+            else:
+                logger.error(
+                    "Date range field '{}' not found in Airfocus field mappings for update",
+                    date_range_field_name,
+                )
+
         return patch_operations
 
     def validate(self) -> List[str]:
@@ -378,6 +480,11 @@ class AirfocusItem:
             field_name, team_field_id, _ = self._get_team_field_configuration()
             if not team_field_id:
                 errors.append("Team field not found in Airfocus field mappings")
+
+        if self.date_range_field_value:
+            _, date_range_field_id = self._get_date_range_field_configuration()
+            if not date_range_field_id:
+                errors.append("Date range field not found in Airfocus field mappings")
 
         return errors
 

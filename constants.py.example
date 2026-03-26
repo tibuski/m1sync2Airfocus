@@ -52,6 +52,8 @@ AZURE_DEVOPS_TO_AIRFOCUS_STATUS_MAPPING = {
 
 TEAM_FIELD = {"YOUR_TEAM_FIELD_NAME": ["YOUR_TEAM_VALUE"]}
 
+DATE_RANGE_FIELD = "DATE_RANGE_FIELD_NAME"
+
 # =============================================================================
 # General Settings
 # =============================================================================

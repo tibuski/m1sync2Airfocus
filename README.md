@@ -71,6 +71,14 @@ In `constants.py`:
 - `AZURE_TENANT_ID` (optional) - Tenant ID used for Azure CLI login token acquisition (helps avoid tenant selection prompts)
 - `AZURE_DEVOPS_RESOURCE` (required) - Azure DevOps audience GUID (static; normally do not change)
 - `AZURE_CLI_PYTHON_EXE` / `AZURE_CLI_BAT_PATH` (optional) - Azure CLI locations (helps when running under `uv run`)
+- `DATE_RANGE_FIELD` (optional) - Airfocus date-range field name to populate from Azure DevOps dates
+
+Example:
+```python
+DATE_RANGE_FIELD = "Date range"
+```
+
+Azure DevOps source fields are handled internally (`Microsoft.VSTS.Scheduling.StartDate` and `Microsoft.VSTS.Scheduling.TargetDate`, with fallback to `Microsoft.VSTS.Scheduling.DueDate`).
 
 The Azure DevOps sync will:
 - Perform `az login --use-device-code` (interactive)
@@ -106,3 +114,4 @@ All configuration is done in `constants.py`. Here are the available options:
 | `TEAM_FIELD` | Auto-assign team to items | Optional |
 | `AZURE_CLI_PYTHON_EXE` | Azure CLI bundled python.exe path | Optional |
 | `AZURE_CLI_BAT_PATH` | Azure CLI az.bat path | Optional |
+| `DATE_RANGE_FIELD` | Airfocus date-range field name to populate | Optional |
