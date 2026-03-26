@@ -20,6 +20,25 @@ class JiraClient:
         self.base_url = self.config.JIRA_REST_URL.replace("/rest/api/latest", "")
         self.session = requests.Session()
 
+    @staticmethod
+    def _summarize_response_data(data: Any) -> str:
+        """Return a compact summary of a parsed JSON payload for debug logging."""
+        if isinstance(data, dict):
+            keys = list(data.keys())
+            summary_parts = [f"keys={keys[:10]}"]
+
+            for count_key in ["issues", "items", "workItems", "value"]:
+                value = data.get(count_key)
+                if isinstance(value, (list, dict)):
+                    summary_parts.append(f"{count_key}={len(value)}")
+
+            return ", ".join(summary_parts)
+
+        if isinstance(data, list):
+            return f"list_len={len(data)}"
+
+        return f"type={type(data).__name__}"
+
     def validate_response(
         self,
         response: requests.Response,
@@ -43,7 +62,11 @@ class JiraClient:
         if response.status_code in expected_status_codes:
             try:
                 data = response.json()
-                logger.debug("{} successful. Response: {}", operation_name, data)
+                logger.debug(
+                    "{} successful. Response summary: {}",
+                    operation_name,
+                    self._summarize_response_data(data),
+                )
                 return True, data
             except Exception as e:
                 error_msg = (

@@ -25,6 +25,29 @@ class AirfocusClient:
         self.max_retries = max_retries
         self.base_delay = base_delay
 
+    @staticmethod
+    def _summarize_response_data(data: Any) -> str:
+        """Return a compact summary of a parsed JSON payload for debug logging."""
+        if isinstance(data, dict):
+            keys = list(data.keys())
+            summary_parts = [f"keys={keys[:10]}"]
+
+            for count_key in ["items", "issues", "workItems", "value", "fields"]:
+                value = data.get(count_key)
+                if isinstance(value, (list, dict)):
+                    summary_parts.append(f"{count_key}={len(value)}")
+
+            embedded = data.get("_embedded")
+            if isinstance(embedded, dict):
+                summary_parts.append(f"_embedded_keys={list(embedded.keys())[:10]}")
+
+            return ", ".join(summary_parts)
+
+        if isinstance(data, list):
+            return f"list_len={len(data)}"
+
+        return f"type={type(data).__name__}"
+
     def _request_with_retry(
         self,
         method: str,
@@ -96,7 +119,11 @@ class AirfocusClient:
         if response.status_code in expected_status_codes:
             try:
                 data = response.json()
-                logger.debug("{} successful. Response: {}", operation_name, data)
+                logger.debug(
+                    "{} successful. Response summary: {}",
+                    operation_name,
+                    self._summarize_response_data(data),
+                )
                 return True, data
             except Exception as e:
                 error_msg = (
