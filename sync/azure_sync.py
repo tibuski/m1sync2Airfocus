@@ -96,9 +96,6 @@ class AzureDevOpsSync(BaseSync):
         }
 
         self.save_to_json(result, "azure_devops", work_item_type.lower())
-        self.cleanup_old_files(
-            f"azure_devops_{work_item_type.lower()}_*.json", keep_count=10
-        )
 
         logger.info(
             "Successfully fetched {} Azure DevOps items", len(data.get("items", []))

@@ -54,7 +54,6 @@ class JiraSync(BaseSync):
         }
 
         self.save_to_json(result, "jira", project_key)
-        self.cleanup_old_files(f"jira_{project_key}_issues_*.json", keep_count=10)
 
         logger.info("Successfully fetched {} JIRA issues", len(all_issues))
         return result

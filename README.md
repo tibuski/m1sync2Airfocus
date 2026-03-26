@@ -63,6 +63,8 @@ Run without arguments to display help:
 uv run .\main.py
 ```
 
+Before each sync run, the tool cleans old timestamped snapshot JSON files in `data/` and keeps the most recent files based on `SNAPSHOT_FILES_TO_KEEP`.
+
 ## Azure DevOps Configuration
 
 In `constants.py`:
@@ -107,6 +109,7 @@ All configuration is done in `constants.py`. Here are the available options:
 | `AIRFOCUS_API_KEY` | Airfocus API Key | Required |
 | `LOGGING_LEVEL` | Console log verbosity (DEBUG, INFO, WARNING, ERROR) | `WARNING` |
 | `LOG_FILE_PATH` | Path to log file (always stores DEBUG logs) | `data/jira2airfocus.log` |
+| `SNAPSHOT_FILES_TO_KEEP` | Number of timestamped snapshot JSON files to keep per sync type | `3` |
 | `SSL_VERIFY` | Enable SSL certificate verification | `False` |
 | `DATA_DIR` | Directory for data files | `data` |
 | `JIRA_TO_AIRFOCUS_STATUS_MAPPING` | Map JIRA statuses to Airfocus | Optional |

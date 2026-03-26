@@ -7,6 +7,8 @@ It handles authentication, data retrieval, and logging for the integration proce
 
 import sys
 import argparse
+import glob
+import os
 import urllib3
 
 from loguru import logger
@@ -31,9 +33,76 @@ logger.add(
 logger.add(sys.stderr, level=constants.LOGGING_LEVEL, colorize=True)
 
 
+def get_snapshot_files_to_keep() -> int:
+    """Return the configured number of snapshot files to retain."""
+    raw_keep_count = getattr(constants, "SNAPSHOT_FILES_TO_KEEP", 3)
+
+    try:
+        keep_count = int(raw_keep_count)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid SNAPSHOT_FILES_TO_KEEP value '{}'; using default 3",
+            raw_keep_count,
+        )
+        return 3
+
+    if keep_count < 0:
+        logger.warning(
+            "SNAPSHOT_FILES_TO_KEEP cannot be negative (got {}); using default 3",
+            keep_count,
+        )
+        return 3
+
+    return keep_count
+
+
+def cleanup_old_files(*patterns: str) -> None:
+    """Delete old timestamped snapshot files from the data directory."""
+    keep_count = get_snapshot_files_to_keep()
+
+    for pattern in patterns:
+        file_pattern = os.path.join(constants.DATA_DIR, pattern)
+        files = glob.glob(file_pattern)
+
+        if len(files) <= keep_count:
+            continue
+
+        files.sort(key=os.path.getmtime, reverse=True)
+        files_to_delete = files[keep_count:]
+
+        logger.info(
+            "Cleaning snapshot files for pattern '{}': keeping {}, deleting {}",
+            pattern,
+            keep_count,
+            len(files_to_delete),
+        )
+
+        for file_path in files_to_delete:
+            try:
+                os.remove(file_path)
+                logger.debug("Deleted old snapshot file: {}", file_path)
+            except OSError as exc:
+                logger.warning("Failed to delete snapshot file {}: {}", file_path, exc)
+
+
+def cleanup_generated_files(sync_mode: str) -> None:
+    """Clean old snapshot files for the selected sync mode before syncing."""
+    patterns = [f"airfocus_{constants.AIRFOCUS_WORKSPACE_ID}_items_*.json"]
+
+    if sync_mode == "jira":
+        patterns.append(f"jira_{constants.JIRA_PROJECT_KEY}_*.json")
+    elif sync_mode == "azure-devops":
+        work_item_type = getattr(constants, "AZURE_DEVOPS_WORK_ITEM_TYPE", "").strip()
+        if work_item_type:
+            patterns.append(f"azure_devops_{work_item_type.lower()}_*.json")
+
+    cleanup_old_files(*patterns)
+
+
 def run_jira_sync() -> None:
     """Execute JIRA to Airfocus sync."""
     logger.info("Starting JIRA sync...")
+    cleanup_generated_files("jira")
     airfocus_client = AirfocusClient()
 
     logger.info("Fetching Airfocus project data...")
@@ -71,15 +140,11 @@ def run_jira_sync() -> None:
         results.get("error_count"),
     )
 
-    jira_sync.cleanup_old_files(
-        f"jira_{constants.JIRA_PROJECT_KEY}_issues_*.json", keep_count=10
-    )
-    jira_sync.cleanup_old_files("airfocus_*_items_*.json", keep_count=10)
-
 
 def run_azure_devops_sync() -> None:
     """Execute Azure DevOps to Airfocus sync."""
     logger.info("Starting Azure DevOps sync...")
+    cleanup_generated_files("azure-devops")
     airfocus_client = AirfocusClient()
 
     logger.info("Fetching Airfocus project data...")
@@ -116,8 +181,6 @@ def run_azure_devops_sync() -> None:
         results.get("updated_count"),
         results.get("error_count"),
     )
-
-    azure_sync.cleanup_old_files("azure_devops_*.json", keep_count=10)
 
 
 def main() -> None:

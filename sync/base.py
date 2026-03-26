@@ -6,7 +6,6 @@ This module provides common utilities and base class for sync operations.
 
 import os
 import json
-import glob
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from abc import ABC, abstractmethod
@@ -76,42 +75,6 @@ class BaseSync(ABC):
         except Exception as e:
             logger.error("Failed to save data to file: {}", e)
             raise
-
-    def cleanup_old_files(self, pattern: str, keep_count: int = 10) -> None:
-        """
-        Remove old JSON files matching a pattern.
-
-        Args:
-            pattern: File pattern to match
-            keep_count: Number of most recent files to keep
-        """
-        try:
-            file_pattern = f"{self.config.DATA_DIR}/{pattern}"
-            files = glob.glob(file_pattern)
-
-            if len(files) <= keep_count:
-                return
-
-            files.sort(key=os.path.getmtime, reverse=True)
-            files_to_keep = files[:keep_count]
-            files_to_delete = files[keep_count:]
-
-            logger.info(
-                "Cleaning up old files for pattern '{}': keeping {}, deleting {}",
-                pattern,
-                len(files_to_keep),
-                len(files_to_delete),
-            )
-
-            for file_path in files_to_delete:
-                try:
-                    os.remove(file_path)
-                    logger.debug("Deleted old file: {}", file_path)
-                except Exception as e:
-                    logger.warning("Failed to delete file {}: {}", file_path, e)
-
-        except Exception as e:
-            logger.error("Exception during cleanup for pattern '{}': {}", pattern, e)
 
     def load_airfocus_items(self) -> Dict[str, Any]:
         """Load existing Airfocus items from JSON file."""
