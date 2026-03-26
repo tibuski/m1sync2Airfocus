@@ -1,7 +1,7 @@
 [project]
-name = "jira2airfocus"
+name = "m1sync2airfocus"
 version = "0.1.0"
-description = "Sync Jira issues to Airfocus"
+description = "Sync JIRA Epics or Azure DevOps work items to Airfocus"
 requires-python = ">=3.10"
 dependencies = [
     "certifi==2025.10.5",

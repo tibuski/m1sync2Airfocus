@@ -1,6 +1,6 @@
 # m1sync2Airfocus
 
-Python sync utility that synchronizes JIRA issues or Azure DevOps work items with Airfocus workspace items.
+Python sync utility that synchronizes JIRA Epics or Azure DevOps work items with Airfocus workspace items.
 
 ## Prerequisites
 
@@ -52,7 +52,7 @@ You can also override sensitive values with environment variables such as `JIRA_
 Run the sync with either `--jira` or `--azure-devops` flag:
 
 ```powershell
-# Sync JIRA issues to Airfocus
+# Sync JIRA Epics to Airfocus
 uv run .\main.py --jira
 
 # Sync Azure DevOps work items to Airfocus
@@ -68,6 +68,13 @@ uv run .\main.py
 Before each sync run, the tool cleans old timestamped snapshot JSON files in `data/` and keeps the most recent files based on `SNAPSHOT_FILES_TO_KEEP`.
 
 If `constants.py` is missing, the app now fails cleanly at startup with an actionable configuration error instead of exiting during import.
+
+## Current Sync Scope
+
+- `--jira` currently fetches only JIRA items matching `issuetype = Epic` for the configured project.
+- `--azure-devops` fetches the configured Azure DevOps work item type from the configured org/project.
+- For both sources, the Airfocus description is used as a sync marker and reference block.
+- The original JIRA or Azure DevOps description body is not copied into Airfocus; the tool stores source links, assignee details, and sync metadata instead.
 
 ## Azure DevOps Configuration
 
@@ -122,3 +129,9 @@ All configuration is done in `constants.py`. Here are the available options:
 | `AZURE_CLI_PYTHON_EXE` | Azure CLI bundled python.exe path | Optional |
 | `AZURE_CLI_BAT_PATH` | Azure CLI az.bat path | Optional |
 | `DATE_RANGE_FIELD` | Airfocus date-range field name to populate | Optional |
+
+## Notes and Limitations
+
+- JIRA sync is currently limited to Epics; if you need Stories, Tasks, or custom issue types, the query logic must be extended.
+- Duplicate detection depends on the sync reference kept in the Airfocus description; editing or removing that block can break matching.
+- `SSL_VERIFY` is configurable in `constants.py`; keeping it enabled is recommended outside local troubleshooting scenarios.
