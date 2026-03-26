@@ -6,19 +6,14 @@ It handles authentication, data retrieval, and logging for the integration proce
 """
 
 import sys
-import os
 import argparse
-import json
-from datetime import datetime
 import urllib3
-from typing import Dict, Optional, Any, List
 
 from loguru import logger
 
 from config import validate_config, get_config
 from api import AirfocusClient
 from sync import JiraSync, AzureDevOpsSync
-from models import AirfocusItem
 
 constants = get_config()
 
@@ -36,215 +31,26 @@ logger.add(
 logger.add(sys.stderr, level=constants.LOGGING_LEVEL, colorize=True)
 
 
-def get_airfocus_field_data(
-    workspace_id: str,
-    workspace_items: Optional[List[Dict[str, Any]]] = None,
-) -> Optional[Dict[str, Any]]:
-    """Get all field data from an Airfocus workspace and save to JSON file."""
-    client = AirfocusClient()
-
-    try:
-        success, data = client.get_workspace(workspace_id)
-        if not success:
-            return None
-
-        logger.info("Successfully retrieved workspace data for {}", workspace_id)
-
-        embedded = data.get("_embedded", {})
-        fields_dict = embedded.get("fields", {})
-        statuses_dict = embedded.get("statuses", {})
-
-        fields = list(fields_dict.values())
-        statuses = list(statuses_dict.values())
-
-        field_data = {
-            "workspace_id": workspace_id,
-            "fetched_at": datetime.now().isoformat(),
-            "fields": fields,
-            "field_mapping": {},
-            "statuses": statuses,
-            "status_mapping": {},
-        }
-
-        for field in fields:
-            field_name = field.get("name", "")
-            field_id = field.get("id", "")
-            if field_name and field_id:
-                field_data["field_mapping"][field_name] = field_id
-
-        for status in statuses:
-            status_name = status.get("name", "")
-            status_id = status.get("id", "")
-            if status_name and status_id:
-                field_data["status_mapping"][status_name] = status_id
-
-        field_values = {}
-
-        id_to_name_mapping = {}
-        for field_name, field_id in field_data["field_mapping"].items():
-            id_to_name_mapping[field_id] = field_name
-
-        try:
-            items = workspace_items
-            if items is None:
-                items_success, items_data = client.get_items(workspace_id)
-                if not items_success:
-                    raise ValueError(items_data.get("error", "Failed to fetch items"))
-                items = items_data.get("items", [])
-
-            for item in items:
-                item_fields = item.get("fields", {})
-
-                for field_id, field_data_obj in item_fields.items():
-                    field_name = id_to_name_mapping.get(field_id)
-
-                    if field_name:
-                        if field_name not in field_values:
-                            field_values[field_name] = []
-
-                        field_value = ""
-                        if "text" in field_data_obj:
-                            field_value = field_data_obj.get("text", "")
-                        elif "value" in field_data_obj:
-                            field_value = str(field_data_obj.get("value", ""))
-                        elif "displayValue" in field_data_obj:
-                            field_value = field_data_obj.get("displayValue", "")
-
-                        if field_value and field_value not in field_values[field_name]:
-                            field_values[field_name].append(field_value)
-
-            logger.info(
-                "Extracted field values for {} fields from workspace items",
-                len(field_values),
-            )
-
-        except Exception as e:
-            logger.warning("Failed to fetch workspace items for field values: {}", e)
-
-        field_data["field_values"] = field_values
-
-        try:
-            os.makedirs(constants.DATA_DIR, exist_ok=True)
-            filepath = f"{constants.DATA_DIR}/airfocus_fields.json"
-
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(field_data, f, indent=2, ensure_ascii=False)
-
-            logger.info(
-                "Successfully saved {} field definitions, {} statuses, and field values to {}",
-                len(fields),
-                len(statuses),
-                filepath,
-            )
-
-            return field_data
-
-        except Exception as e:
-            logger.error("Failed to save field data to file: {}", e)
-            return None
-
-    except Exception as e:
-        logger.error(
-            "Exception occurred while retrieving workspace data for {}: {}",
-            workspace_id,
-            e,
-        )
-        return None
-
-
-def get_airfocus_project_data(workspace_id: str) -> Dict[str, Any]:
-    """Fetch Airfocus project data including all items and their details."""
-    client = AirfocusClient()
-
-    logger.info("Requesting Airfocus items for workspace {}", workspace_id)
-
-    success, data = client.get_items(workspace_id)
-    if not success:
-        return data
-
-    try:
-        raw_items = data.get("items", [])
-        all_items = []
-
-        for item in raw_items:
-            simplified_item = {
-                "id": item.get("id", ""),
-                "name": item.get("name", ""),
-                "description": item.get("description", ""),
-                "statusId": item.get("statusId", ""),
-                "color": item.get("color", ""),
-                "archived": item.get("archived", False),
-                "createdAt": item.get("createdAt", ""),
-                "lastUpdatedAt": item.get("lastUpdatedAt", ""),
-                "fields": item.get("fields", {}),
-            }
-
-            logger.debug(
-                "Processed Airfocus item: {} (ID: {})",
-                simplified_item["name"],
-                simplified_item["id"],
-            )
-            all_items.append(simplified_item)
-
-        logger.info(
-            "Found {} total items in Airfocus workspace {}",
-            len(all_items),
-            workspace_id,
-        )
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"airfocus_{workspace_id}_items_{timestamp}.json"
-        filepath = f"{constants.DATA_DIR}/{filename}"
-
-        try:
-            os.makedirs(constants.DATA_DIR, exist_ok=True)
-
-            final_data = {
-                "workspace_id": workspace_id,
-                "total_items": len(all_items),
-                "fetched_at": datetime.now().isoformat(),
-                "items": all_items,
-            }
-
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(final_data, f, indent=2, ensure_ascii=False)
-
-            standard_filepath = f"{constants.DATA_DIR}/airfocus_data.json"
-            with open(standard_filepath, "w", encoding="utf-8") as f:
-                json.dump(final_data, f, indent=2, ensure_ascii=False)
-
-            logger.info("Successfully saved {} items to {}", len(all_items), filepath)
-
-        except Exception as e:
-            logger.error("Failed to save data to file: {}", e)
-            return {"error": f"Failed to save data: {e}"}
-
-        return final_data
-
-    except Exception as e:
-        logger.error("Exception occurred while fetching Airfocus data: {}", e)
-        return {"error": f"Exception occurred: {str(e)}"}
-
-
 def run_jira_sync() -> None:
     """Execute JIRA to Airfocus sync."""
     logger.info("Starting JIRA sync...")
+    airfocus_client = AirfocusClient()
 
     logger.info("Fetching Airfocus project data...")
-    airfocus_data = get_airfocus_project_data(constants.AIRFOCUS_WORKSPACE_ID)
-    if "error" in airfocus_data:
-        logger.error(
-            "Failed to fetch Airfocus project data: {}", airfocus_data["error"]
-        )
+    success, airfocus_data = airfocus_client.get_workspace_project_data(
+        constants.AIRFOCUS_WORKSPACE_ID
+    )
+    if not success:
+        logger.error("Failed to fetch Airfocus project data: {}", airfocus_data["error"])
         sys.exit(1)
 
     logger.info("Fetching Airfocus field data...")
-    field_data = get_airfocus_field_data(
+    success, field_data = airfocus_client.get_workspace_field_data(
         constants.AIRFOCUS_WORKSPACE_ID,
         workspace_items=airfocus_data.get("items", []),
     )
-    if field_data is None:
-        logger.error("Failed to fetch Airfocus field data")
+    if not success:
+        logger.error("Failed to fetch Airfocus field data: {}", field_data.get("error"))
         sys.exit(1)
 
     jira_sync = JiraSync()
@@ -274,22 +80,23 @@ def run_jira_sync() -> None:
 def run_azure_devops_sync() -> None:
     """Execute Azure DevOps to Airfocus sync."""
     logger.info("Starting Azure DevOps sync...")
+    airfocus_client = AirfocusClient()
 
     logger.info("Fetching Airfocus project data...")
-    airfocus_data = get_airfocus_project_data(constants.AIRFOCUS_WORKSPACE_ID)
-    if "error" in airfocus_data:
-        logger.error(
-            "Failed to fetch Airfocus project data: {}", airfocus_data["error"]
-        )
+    success, airfocus_data = airfocus_client.get_workspace_project_data(
+        constants.AIRFOCUS_WORKSPACE_ID
+    )
+    if not success:
+        logger.error("Failed to fetch Airfocus project data: {}", airfocus_data["error"])
         sys.exit(1)
 
     logger.info("Fetching Airfocus field data...")
-    field_data = get_airfocus_field_data(
+    success, field_data = airfocus_client.get_workspace_field_data(
         constants.AIRFOCUS_WORKSPACE_ID,
         workspace_items=airfocus_data.get("items", []),
     )
-    if field_data is None:
-        logger.error("Failed to fetch Airfocus field data")
+    if not success:
+        logger.error("Failed to fetch Airfocus field data: {}", field_data.get("error"))
         sys.exit(1)
 
     azure_sync = AzureDevOpsSync()

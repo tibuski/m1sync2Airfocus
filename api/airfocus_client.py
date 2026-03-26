@@ -4,7 +4,10 @@ Airfocus API Client.
 This module provides a dedicated client class for interacting with the Airfocus API.
 """
 
+import json
+import os
 import time
+from datetime import datetime
 import requests
 from typing import Any, Dict, List, Optional, Tuple
 from loguru import logger
@@ -106,6 +109,164 @@ class AirfocusClient:
             logger.error(error_msg)
             logger.error("Response: {}", response.text)
             return False, {"error": error_msg, "response": response.text}
+
+    def _save_data_file(self, data: Dict[str, Any], filename: str) -> str:
+        """Persist JSON data in the configured data directory."""
+        os.makedirs(self.config.DATA_DIR, exist_ok=True)
+        filepath = f"{self.config.DATA_DIR}/{filename}"
+
+        with open(filepath, "w", encoding="utf-8") as file_handle:
+            json.dump(data, file_handle, indent=2, ensure_ascii=False)
+
+        return filepath
+
+    @staticmethod
+    def _extract_field_value(field_data: Dict[str, Any]) -> str:
+        """Normalize a field value for field metadata extraction."""
+        if "text" in field_data:
+            return field_data.get("text", "")
+        if "value" in field_data:
+            return str(field_data.get("value", ""))
+        if "displayValue" in field_data:
+            return field_data.get("displayValue", "")
+        return ""
+
+    @staticmethod
+    def _simplify_item(item: Dict[str, Any]) -> Dict[str, Any]:
+        """Keep only the item fields needed by the sync process."""
+        return {
+            "id": item.get("id", ""),
+            "name": item.get("name", ""),
+            "description": item.get("description", ""),
+            "statusId": item.get("statusId", ""),
+            "color": item.get("color", ""),
+            "archived": item.get("archived", False),
+            "createdAt": item.get("createdAt", ""),
+            "lastUpdatedAt": item.get("lastUpdatedAt", ""),
+            "fields": item.get("fields", {}),
+        }
+
+    def get_workspace_field_data(
+        self,
+        workspace_id: str,
+        workspace_items: Optional[List[Dict[str, Any]]] = None,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """Fetch workspace field metadata, derive field values, and persist it."""
+        success, data = self.get_workspace(workspace_id)
+        if not success:
+            return False, data
+
+        logger.info("Successfully retrieved workspace data for {}", workspace_id)
+
+        embedded = data.get("_embedded", {})
+        fields = list(embedded.get("fields", {}).values())
+        statuses = list(embedded.get("statuses", {}).values())
+
+        field_data: Dict[str, Any] = {
+            "workspace_id": workspace_id,
+            "fetched_at": datetime.now().isoformat(),
+            "fields": fields,
+            "field_mapping": {},
+            "statuses": statuses,
+            "status_mapping": {},
+        }
+
+        for field in fields:
+            field_name = field.get("name", "")
+            field_id = field.get("id", "")
+            if field_name and field_id:
+                field_data["field_mapping"][field_name] = field_id
+
+        for status in statuses:
+            status_name = status.get("name", "")
+            status_id = status.get("id", "")
+            if status_name and status_id:
+                field_data["status_mapping"][status_name] = status_id
+
+        field_values: Dict[str, List[str]] = {}
+        id_to_name_mapping = {
+            field_id: field_name
+            for field_name, field_id in field_data["field_mapping"].items()
+        }
+
+        try:
+            items = workspace_items
+            if items is None:
+                items_success, items_data = self.get_items(workspace_id)
+                if not items_success:
+                    return False, items_data
+                items = items_data.get("items", [])
+
+            for item in items:
+                for field_id, field_data_obj in item.get("fields", {}).items():
+                    field_name = id_to_name_mapping.get(field_id)
+                    if not field_name:
+                        continue
+
+                    field_values.setdefault(field_name, [])
+                    field_value = self._extract_field_value(field_data_obj)
+                    if field_value and field_value not in field_values[field_name]:
+                        field_values[field_name].append(field_value)
+
+            logger.info(
+                "Extracted field values for {} fields from workspace items",
+                len(field_values),
+            )
+        except Exception as exc:
+            logger.warning("Failed to derive workspace field values: {}", exc)
+
+        field_data["field_values"] = field_values
+
+        try:
+            filepath = self._save_data_file(field_data, "airfocus_fields.json")
+            logger.info(
+                "Successfully saved {} field definitions, {} statuses, and field values to {}",
+                len(fields),
+                len(statuses),
+                filepath,
+            )
+            return True, field_data
+        except Exception as exc:
+            error_msg = f"Failed to save field data: {exc}"
+            logger.error(error_msg)
+            return False, {"error": error_msg}
+
+    def get_workspace_project_data(self, workspace_id: str) -> Tuple[bool, Dict[str, Any]]:
+        """Fetch workspace items, simplify them, and persist snapshot files."""
+        logger.info("Requesting Airfocus items for workspace {}", workspace_id)
+
+        success, data = self.get_items(workspace_id)
+        if not success:
+            return False, data
+
+        try:
+            raw_items = data.get("items", [])
+            all_items = [self._simplify_item(item) for item in raw_items]
+
+            logger.info(
+                "Found {} total items in Airfocus workspace {}",
+                len(all_items),
+                workspace_id,
+            )
+
+            final_data = {
+                "workspace_id": workspace_id,
+                "total_items": len(all_items),
+                "fetched_at": datetime.now().isoformat(),
+                "items": all_items,
+            }
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"airfocus_{workspace_id}_items_{timestamp}.json"
+            filepath = self._save_data_file(final_data, filename)
+            self._save_data_file(final_data, "airfocus_data.json")
+
+            logger.info("Successfully saved {} items to {}", len(all_items), filepath)
+            return True, final_data
+        except Exception as exc:
+            error_msg = f"Exception occurred while fetching Airfocus data: {exc}"
+            logger.error(error_msg)
+            return False, {"error": error_msg}
 
     def get_workspace(self, workspace_id: str) -> Tuple[bool, Dict[str, Any]]:
         """
