@@ -4,10 +4,54 @@ Shared utility functions for JIRA to Airfocus integration.
 
 import json
 import os
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from loguru import logger
 
 import constants
+
+
+_AIRFOCUS_FIELDS_CACHE: Optional[Dict[str, Any]] = None
+_AIRFOCUS_FIELDS_CACHE_MTIME: Optional[float] = None
+
+
+def _get_airfocus_fields_filepath() -> str:
+    return f"{constants.DATA_DIR}/airfocus_fields.json"
+
+
+def _load_airfocus_fields_data() -> Optional[Dict[str, Any]]:
+    """Load and cache Airfocus field metadata for the current file version."""
+    global _AIRFOCUS_FIELDS_CACHE, _AIRFOCUS_FIELDS_CACHE_MTIME
+
+    filepath = _get_airfocus_fields_filepath()
+    if not os.path.exists(filepath):
+        logger.warning(
+            "Airfocus fields file not found at {}. Run get_airfocus_field_data() first.",
+            filepath,
+        )
+        return None
+
+    try:
+        current_mtime = os.path.getmtime(filepath)
+    except OSError as e:
+        logger.error("Failed to stat Airfocus fields file {}: {}", filepath, e)
+        return None
+
+    if (
+        _AIRFOCUS_FIELDS_CACHE is not None
+        and _AIRFOCUS_FIELDS_CACHE_MTIME == current_mtime
+    ):
+        return _AIRFOCUS_FIELDS_CACHE
+
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            field_data = json.load(f)
+    except Exception as e:
+        logger.error("Exception occurred while reading field data: {}", e)
+        return None
+
+    _AIRFOCUS_FIELDS_CACHE = field_data
+    _AIRFOCUS_FIELDS_CACHE_MTIME = current_mtime
+    return field_data
 
 
 def get_airfocus_field_id(field_name: str) -> Optional[str]:
@@ -21,17 +65,9 @@ def get_airfocus_field_id(field_name: str) -> Optional[str]:
         str: The field ID for the specified field, or None if not found.
     """
     try:
-        filepath = f"{constants.DATA_DIR}/airfocus_fields.json"
-
-        if not os.path.exists(filepath):
-            logger.warning(
-                "Airfocus fields file not found at {}. Run get_airfocus_field_data() first.",
-                filepath,
-            )
+        field_data = _load_airfocus_fields_data()
+        if not field_data:
             return None
-
-        with open(filepath, "r", encoding="utf-8") as f:
-            field_data = json.load(f)
 
         field_mapping = field_data.get("field_mapping", {})
         field_id = field_mapping.get(field_name)
@@ -60,17 +96,9 @@ def get_airfocus_status_id(status_name: str) -> Optional[str]:
         str: The status ID for the specified status, or None if not found.
     """
     try:
-        filepath = f"{constants.DATA_DIR}/airfocus_fields.json"
-
-        if not os.path.exists(filepath):
-            logger.warning(
-                "Airfocus fields file not found at {}. Run get_airfocus_field_data() first.",
-                filepath,
-            )
+        field_data = _load_airfocus_fields_data()
+        if not field_data:
             return None
-
-        with open(filepath, "r", encoding="utf-8") as f:
-            field_data = json.load(f)
 
         status_mapping = field_data.get("status_mapping", {})
         status_id = status_mapping.get(status_name)
@@ -100,17 +128,9 @@ def get_airfocus_field_option_id(field_name: str, option_name: str) -> Optional[
         str: The option ID for the specified option, or None if not found.
     """
     try:
-        filepath = f"{constants.DATA_DIR}/airfocus_fields.json"
-
-        if not os.path.exists(filepath):
-            logger.warning(
-                "Airfocus fields file not found at {}. Run get_airfocus_field_data() first.",
-                filepath,
-            )
+        field_data = _load_airfocus_fields_data()
+        if not field_data:
             return None
-
-        with open(filepath, "r", encoding="utf-8") as f:
-            field_data = json.load(f)
 
         fields = field_data.get("fields", [])
         for field in fields:
@@ -187,9 +207,9 @@ def get_mapped_status_id(
 
     if not status_id:
         try:
-            filepath = f"{constants.DATA_DIR}/airfocus_fields.json"
-            with open(filepath, "r", encoding="utf-8") as f:
-                field_data = json.load(f)
+            field_data = _load_airfocus_fields_data()
+            if not field_data:
+                return None
 
             statuses = field_data.get("statuses", [])
             for status in statuses:

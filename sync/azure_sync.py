@@ -119,7 +119,10 @@ class AzureDevOpsSync(BaseSync):
         for item_data in airfocus_items:
             af_item = AirfocusItem.from_airfocus_data(item_data)
             if af_item.azure_devops_id:
-                airfocus_by_azure_id[af_item.azure_devops_id] = af_item
+                airfocus_by_azure_id[af_item.azure_devops_id] = {
+                    "parsed": af_item,
+                    "raw": item_data,
+                }
 
         logger.info(
             "Syncing {} Azure DevOps items to Airfocus workspace {}",
@@ -129,6 +132,7 @@ class AzureDevOpsSync(BaseSync):
 
         created_count = 0
         updated_count = 0
+        unchanged_count = 0
         error_count = 0
         errors = []
 
@@ -175,13 +179,16 @@ class AzureDevOpsSync(BaseSync):
                 )
 
             if existing:
-                to_update.append(
-                    {
-                        "item_id": existing.item_id,
-                        "azure_id": str(azure_id),
-                        "operations": airfocus_item.to_patch_payload(),
-                    }
-                )
+                if airfocus_item.has_changes(existing["raw"]):
+                    to_update.append(
+                        {
+                            "item_id": existing["parsed"].item_id,
+                            "azure_id": str(azure_id),
+                            "operations": airfocus_item.to_patch_payload(),
+                        }
+                    )
+                else:
+                    unchanged_count += 1
             else:
                 to_create.append(
                     {
@@ -256,9 +263,10 @@ class AzureDevOpsSync(BaseSync):
                 logger.error("Bulk update failed: {}", e)
 
         logger.info(
-            "Sync completed. Created: {}, Updated: {}, Errors: {}",
+            "Sync completed. Created: {}, Updated: {}, Unchanged: {}, Errors: {}",
             created_count,
             updated_count,
+            unchanged_count,
             error_count,
         )
 
@@ -266,6 +274,7 @@ class AzureDevOpsSync(BaseSync):
             "total_items": len(raw_items),
             "created_count": created_count,
             "updated_count": updated_count,
+            "unchanged_count": unchanged_count,
             "error_count": error_count,
             "errors": errors,
         }

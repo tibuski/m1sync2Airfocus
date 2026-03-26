@@ -206,25 +206,7 @@ class AirfocusItem:
         # Extract source key from description
         # JIRA format: JIRA-123, Azure DevOps format: Feature-123 or ADO-123
         description_raw = airfocus_data.get("description", "")
-        if isinstance(description_raw, dict):
-            blocks = description_raw.get("blocks", [])
-
-            def extract_all_text(obj):
-                texts = []
-                if isinstance(obj, dict):
-                    if obj.get("type") == "text":
-                        texts.append(obj.get("content", ""))
-                    else:
-                        for value in obj.values():
-                            texts.extend(extract_all_text(value))
-                elif isinstance(obj, list):
-                    for item in obj:
-                        texts.extend(extract_all_text(item))
-                return texts
-
-            description_text = "".join(extract_all_text(blocks))
-        else:
-            description_text = str(description_raw) if description_raw else ""
+        description_text = cls._extract_description_text(description_raw)
 
         # Try ADO-123 format for Azure DevOps items (note: \d+ for any number of digits)
         ad_key_match = re.search(r"(ADO-\d+)", description_text)
@@ -262,6 +244,74 @@ class AirfocusItem:
             order=airfocus_data.get("order", 0),
             azure_devops_id=azure_devops_id,
         )
+
+    @classmethod
+    def _extract_description_text(
+        cls,
+        description_raw: Any,
+        include_urls: bool = False,
+    ) -> str:
+        if isinstance(description_raw, dict):
+            blocks = description_raw.get("blocks", [])
+            texts: List[str] = []
+
+            def extract_all_text(obj: Any) -> None:
+                if isinstance(obj, dict):
+                    obj_type = obj.get("type")
+                    if obj_type == "text":
+                        texts.append(str(obj.get("content", "")))
+                        return
+
+                    if include_urls and obj_type == "link" and obj.get("url"):
+                        texts.append(str(obj.get("url")))
+
+                    for value in obj.values():
+                        extract_all_text(value)
+                elif isinstance(obj, list):
+                    for item in obj:
+                        extract_all_text(item)
+
+            extract_all_text(blocks)
+            return "".join(texts)
+
+        return str(description_raw) if description_raw else ""
+
+    @staticmethod
+    def _normalize_description_text(value: str) -> str:
+        normalized = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 \2", value or "")
+        normalized = normalized.replace("**", "").replace("*", "")
+        normalized = re.sub(r"\s+", " ", normalized)
+        return normalized.strip()
+
+    @classmethod
+    def _normalize_description_for_comparison(cls, description_raw: Any) -> str:
+        extracted = cls._extract_description_text(description_raw, include_urls=True)
+        return cls._normalize_description_text(extracted)
+
+    def has_changes(self, airfocus_data: Dict[str, Any]) -> bool:
+        """Return True when the current Airfocus item differs from this item state."""
+        if airfocus_data.get("name", "") != self.name:
+            return True
+
+        if self.status_id and airfocus_data.get("statusId", "") != self.status_id:
+            return True
+
+        current_description = self._normalize_description_for_comparison(
+            airfocus_data.get("description", "")
+        )
+        desired_description = self._normalize_description_for_comparison(
+            self.description
+        )
+        if current_description != desired_description:
+            return True
+
+        current_fields = airfocus_data.get("fields", {})
+        desired_fields = self._build_fields_dict()
+        for field_id, desired_value in desired_fields.items():
+            if current_fields.get(field_id) != desired_value:
+                return True
+
+        return False
 
     def _get_team_field_configuration(
         self,

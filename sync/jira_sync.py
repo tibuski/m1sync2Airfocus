@@ -104,10 +104,14 @@ class JiraSync(BaseSync):
         for item_data in airfocus_items:
             af_item = AirfocusItem.from_airfocus_data(item_data)
             if af_item.source_key:
-                airfocus_by_source_key[af_item.source_key] = af_item
+                airfocus_by_source_key[af_item.source_key] = {
+                    "parsed": af_item,
+                    "raw": item_data,
+                }
 
         to_create = []
         to_update = []
+        unchanged_count = 0
 
         created_count = 0
         updated_count = 0
@@ -120,13 +124,16 @@ class JiraSync(BaseSync):
             airfocus_item = AirfocusItem.from_jira_item(jira_item)
 
             if existing_item:
-                to_update.append(
-                    {
-                        "item_id": existing_item.item_id,
-                        "source_key": source_key,
-                        "operations": airfocus_item.to_patch_payload(),
-                    }
-                )
+                if airfocus_item.has_changes(existing_item["raw"]):
+                    to_update.append(
+                        {
+                            "item_id": existing_item["parsed"].item_id,
+                            "source_key": source_key,
+                            "operations": airfocus_item.to_patch_payload(),
+                        }
+                    )
+                else:
+                    unchanged_count += 1
             else:
                 to_create.append(
                     {
@@ -201,9 +208,10 @@ class JiraSync(BaseSync):
                 logger.error("Bulk update failed: {}", e)
 
         logger.info(
-            "Sync completed. Created: {}, Updated: {}, Errors: {}",
+            "Sync completed. Created: {}, Updated: {}, Unchanged: {}, Errors: {}",
             created_count,
             updated_count,
+            unchanged_count,
             error_count,
         )
 
@@ -213,6 +221,7 @@ class JiraSync(BaseSync):
             "validation_failures": validation_failures,
             "created_count": created_count,
             "updated_count": updated_count,
+            "unchanged_count": unchanged_count,
             "error_count": error_count,
             "errors": errors,
         }
