@@ -32,6 +32,8 @@ Then edit `constants.py` and fill in the required values:
 - `AIRFOCUS_WORKSPACE_ID` - From Airfocus URL
 - `AIRFOCUS_API_KEY` - Your Airfocus API key
 
+You can also override sensitive values with environment variables such as `JIRA_PAT`, `AIRFOCUS_API_KEY`, `AIRFOCUS_WORKSPACE_ID`, `AZURE_DEVOPS_URL`, and `AZURE_DEVOPS_WORK_ITEM_TYPE`.
+
 ## Getting API Credentials
 
 **JIRA Personal Access Token:**
@@ -64,6 +66,8 @@ uv run .\main.py
 ```
 
 Before each sync run, the tool cleans old timestamped snapshot JSON files in `data/` and keeps the most recent files based on `SNAPSHOT_FILES_TO_KEEP`.
+
+If `constants.py` is missing, the app now fails cleanly at startup with an actionable configuration error instead of exiting during import.
 
 ## Azure DevOps Configuration
 

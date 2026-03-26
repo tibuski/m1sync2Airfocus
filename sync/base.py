@@ -13,6 +13,7 @@ from loguru import logger
 
 from config import get_config
 from api import AirfocusClient
+from exceptions import DataSaveError
 
 
 class BaseSync(ABC):
@@ -74,7 +75,7 @@ class BaseSync(ABC):
 
         except Exception as e:
             logger.error("Failed to save data to file: {}", e)
-            raise
+            raise DataSaveError("Failed to save data to file", details={"error": str(e)}) from e
 
     def load_airfocus_items(self) -> Dict[str, Any]:
         """Load existing Airfocus items from JSON file."""

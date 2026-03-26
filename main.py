@@ -15,22 +15,32 @@ from loguru import logger
 
 from config import validate_config, get_config
 from api import AirfocusClient
+from exceptions import ConfigurationError, SyncError
 from sync import JiraSync, AzureDevOpsSync
 
-constants = get_config()
-
-if not constants.SSL_VERIFY:
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 logger.remove()
-logger.add(
-    constants.LOG_FILE_PATH,
-    level="DEBUG",
-    format="{time:YYYY-MM-DD HH:mm:ss} - {level} - {message}",
-    rotation="10 MB",
-    retention="30 days",
-)
-logger.add(sys.stderr, level=constants.LOGGING_LEVEL, colorize=True)
+logger.add(sys.stderr, level="INFO", colorize=True)
+
+constants = None
+
+
+def initialize_runtime_config():
+    """Load config and initialize logging/SSL behavior."""
+    active_config = get_config()
+
+    if not active_config.SSL_VERIFY:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    logger.remove()
+    logger.add(
+        active_config.LOG_FILE_PATH,
+        level="DEBUG",
+        format="{time:YYYY-MM-DD HH:mm:ss} - {level} - {message}",
+        rotation="10 MB",
+        retention="30 days",
+    )
+    logger.add(sys.stderr, level=active_config.LOGGING_LEVEL, colorize=True)
+    return active_config
 
 
 def get_snapshot_files_to_keep() -> int:
@@ -110,8 +120,10 @@ def run_jira_sync() -> None:
         constants.AIRFOCUS_WORKSPACE_ID
     )
     if not success:
-        logger.error("Failed to fetch Airfocus project data: {}", airfocus_data["error"])
-        sys.exit(1)
+        raise SyncError(
+            "Failed to fetch Airfocus project data",
+            details={"error": airfocus_data.get("error")},
+        )
 
     logger.info("Fetching Airfocus field data...")
     success, field_data = airfocus_client.get_workspace_field_data(
@@ -119,16 +131,15 @@ def run_jira_sync() -> None:
         workspace_items=airfocus_data.get("items", []),
     )
     if not success:
-        logger.error("Failed to fetch Airfocus field data: {}", field_data.get("error"))
-        sys.exit(1)
+        raise SyncError(
+            "Failed to fetch Airfocus field data",
+            details={"error": field_data.get("error")},
+        )
 
     jira_sync = JiraSync()
 
     logger.info("Fetching JIRA project data...")
     jira_data = jira_sync.fetch_data()
-    if "error" in jira_data:
-        logger.error("Failed to fetch JIRA project data: {}", jira_data["error"])
-        sys.exit(1)
 
     results = jira_sync.sync_to_airfocus(jira_data)
 
@@ -152,8 +163,10 @@ def run_azure_devops_sync() -> None:
         constants.AIRFOCUS_WORKSPACE_ID
     )
     if not success:
-        logger.error("Failed to fetch Airfocus project data: {}", airfocus_data["error"])
-        sys.exit(1)
+        raise SyncError(
+            "Failed to fetch Airfocus project data",
+            details={"error": airfocus_data.get("error")},
+        )
 
     logger.info("Fetching Airfocus field data...")
     success, field_data = airfocus_client.get_workspace_field_data(
@@ -161,17 +174,16 @@ def run_azure_devops_sync() -> None:
         workspace_items=airfocus_data.get("items", []),
     )
     if not success:
-        logger.error("Failed to fetch Airfocus field data: {}", field_data.get("error"))
-        sys.exit(1)
+        raise SyncError(
+            "Failed to fetch Airfocus field data",
+            details={"error": field_data.get("error")},
+        )
 
     azure_sync = AzureDevOpsSync()
 
     logger.info("Fetching Azure DevOps data...")
     azure_data = azure_sync.fetch_data()
     logger.debug("Azure DevOps data result: {}", azure_data)
-    if "error" in azure_data:
-        logger.error("Failed to fetch Azure DevOps data: {}", azure_data["error"])
-        sys.exit(1)
 
     results = azure_sync.sync_to_airfocus(azure_data)
 
@@ -185,6 +197,14 @@ def run_azure_devops_sync() -> None:
 
 def main() -> None:
     """Main entry point for the JIRA to Airfocus integration script."""
+    global constants
+
+    try:
+        constants = initialize_runtime_config()
+    except ConfigurationError as exc:
+        logger.error("Configuration error: {}", exc)
+        sys.exit(1)
+
     logger.info(
         "Logger configuration - file: DEBUG to {}, console: {}",
         constants.LOG_FILE_PATH,
@@ -225,10 +245,19 @@ Examples:
         logger.error("Please fix the errors in constants.py and try again.")
         sys.exit(1)
 
-    if args.jira:
-        run_jira_sync()
-    elif args.azure_devops:
-        run_azure_devops_sync()
+    try:
+        if args.jira:
+            run_jira_sync()
+        elif args.azure_devops:
+            run_azure_devops_sync()
+    except SyncError as exc:
+        logger.error("Sync failed: {}", exc)
+        if getattr(exc, "details", None):
+            logger.debug("Failure details: {}", exc.details)
+        sys.exit(1)
+    except Exception as exc:
+        logger.exception("Unexpected failure: {}", exc)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

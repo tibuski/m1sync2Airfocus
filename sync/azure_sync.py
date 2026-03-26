@@ -9,6 +9,7 @@ from loguru import logger
 
 from sync.base import BaseSync
 from api import AzureDevOpsClient
+from exceptions import ConfigurationError, DataFetchError
 from models import AirfocusItem
 from models.azure_devops import AzureCliConfig, get_devops_token_via_azure_cli
 
@@ -63,11 +64,13 @@ class AzureDevOpsSync(BaseSync):
         """Fetch Azure DevOps work items."""
         token = self.get_token()
         if not token:
-            return {"error": "Failed to acquire Azure DevOps token"}
+            raise DataFetchError("Failed to acquire Azure DevOps token")
 
         organization, project = self.parse_url(self.config.AZURE_DEVOPS_URL)
         if not organization or not project:
-            return {"error": "Invalid AZURE_DEVOPS_URL format"}
+            raise ConfigurationError(
+                "Invalid AZURE_DEVOPS_URL format; expected https://dev.azure.com/<org>/<project>"
+            )
 
         work_item_type = self.config.AZURE_DEVOPS_WORK_ITEM_TYPE
         logger.debug("Fetching Azure DevOps {} items...", work_item_type)
@@ -83,8 +86,15 @@ class AzureDevOpsSync(BaseSync):
         )
 
         if not success:
-            logger.error("Failed to fetch Azure DevOps data: {}", data.get("error"))
-            return data
+            raise DataFetchError(
+                "Failed to fetch Azure DevOps data",
+                details={
+                    "error": data.get("error"),
+                    "organization": organization,
+                    "project": project,
+                    "work_item_type": work_item_type,
+                },
+            )
 
         result = {
             "organization": organization,

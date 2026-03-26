@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from loguru import logger
 
 from config import get_config, get_airfocus_headers
-from exceptions import APIConnectionError, APIResponseError
+from exceptions import APIConnectionError
 
 
 class AirfocusClient:
@@ -327,19 +327,48 @@ class AirfocusClient:
         url = f"{self.config.AIRFOCUS_REST_URL}/workspaces/{workspace_id}/items/search"
         headers = get_airfocus_headers()
 
-        search_payload = {"filters": {}, "pagination": {"limit": 1000, "offset": 0}}
+        limit = 1000
+        offset = 0
+        all_items: List[Dict[str, Any]] = []
+        last_response_data: Dict[str, Any] = {}
 
-        response = self._request_with_retry(
-            "POST",
-            url,
-            headers=headers,
-            json=search_payload,
-            verify=self.config.SSL_VERIFY,
-        )
+        while True:
+            search_payload = {"filters": {}, "pagination": {"limit": limit, "offset": offset}}
 
-        return self.validate_response(
-            response, f"Get items for workspace {workspace_id}"
-        )
+            response = self._request_with_retry(
+                "POST",
+                url,
+                headers=headers,
+                json=search_payload,
+                verify=self.config.SSL_VERIFY,
+            )
+
+            success, data = self.validate_response(
+                response, f"Get items for workspace {workspace_id} (offset {offset})"
+            )
+            if not success:
+                return False, data
+
+            page_items = data.get("items", [])
+            all_items.extend(page_items)
+            last_response_data = data
+
+            logger.debug(
+                "Fetched {} Airfocus items at offset {} for workspace {}",
+                len(page_items),
+                offset,
+                workspace_id,
+            )
+
+            if len(page_items) < limit:
+                break
+
+            offset += limit
+
+        paginated_data = dict(last_response_data)
+        paginated_data["items"] = all_items
+        paginated_data["totalItems"] = len(all_items)
+        return True, paginated_data
 
     def create_item(
         self, workspace_id: str, payload: Dict[str, Any]

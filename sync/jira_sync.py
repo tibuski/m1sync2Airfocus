@@ -9,6 +9,7 @@ from loguru import logger
 
 from sync.base import BaseSync
 from api import JiraClient
+from exceptions import DataFetchError
 from models import JiraItem, AirfocusItem
 
 
@@ -27,8 +28,10 @@ class JiraSync(BaseSync):
         success, data = self.jira_client.get_issues(project_key)
 
         if not success:
-            logger.error("Failed to fetch JIRA data: {}", data.get("error"))
-            return {"error": data.get("error")}
+            raise DataFetchError(
+                "Failed to fetch JIRA data",
+                details={"error": data.get("error"), "project_key": project_key},
+            )
 
         issues_data = data.get("issues", [])
         all_issues = []

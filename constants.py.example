@@ -5,6 +5,7 @@
 JIRA_REST_URL = "https://your-jira-instance.com/rest/api/latest"
 JIRA_PROJECT_KEY = "YOUR_PROJECT_KEY"
 JIRA_PAT = "your-jira-personal-access-token-here"
+# Optional: override with env var JIRA_PAT
 
 # =============================================================================
 # Azure DevOps Configuration
@@ -31,6 +32,7 @@ AZURE_CLI_BAT_PATH = r"C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\Scripts\
 AIRFOCUS_REST_URL = "https://app.airfocus.com/api"
 AIRFOCUS_WORKSPACE_ID = "your-workspace-id-here"
 AIRFOCUS_API_KEY = "your-airfocus-api-key-here"
+# Optional: override with env vars AIRFOCUS_API_KEY / AIRFOCUS_WORKSPACE_ID
 
 # =============================================================================
 # Sync Options
